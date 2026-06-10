@@ -1908,43 +1908,79 @@ case "jasher": case "jpm": case "jaser": {
   // Fungsi helper: ambil ID valid dari cache saat ini yang belum dikirim
   // [FIX] Pre-filter: skip blacklist + skip grup announce (only-admin) jika bot bukan admin
   const _botNum = NXL.user.id.split(':')[0]
+  let _skipBlacklist = 0, _skipAnnounce = 0, _sentAttempt = 0
+
   const getNextId = () => {
     const liveIds = Object.keys(global.allGroupsCache || {})
     for (const id of liveIds) {
       if (seenIds.has(id)) continue
-      if (blacklistIds.includes(id)) { seenIds.add(id); continue }
+      if (blacklistIds.includes(id)) { seenIds.add(id); _skipBlacklist++; continue }
       // Skip grup only-admin (announce) jika bot bukan admin di grup tersebut
       const meta = global.allGroupsCache[id]
       if (meta && meta.announce) {
         const botIsAdmin = (meta.participants || []).some(p =>
           p.admin && (p.id || '').split(':')[0].replace(/@.*$/, '') === _botNum
         )
-        if (!botIsAdmin) { seenIds.add(id); continue }
+        if (!botIsAdmin) { seenIds.add(id); _skipAnnounce++; continue }
       }
       return id
     }
     return null
   }
 
-  const initialCount = Object.keys(allGroups).filter(id => !blacklistIds.includes(id)).length
-  await m.reply(`⏳ Memproses JPM ${jenis}...\n📋 Target: *${initialCount}* grup`)
+  // [DIAG] Snapshot target sebelum loop — hitung yang benar-benar bisa dikirim
+  const _cacheSnapshot = Object.keys(global.allGroupsCache || {})
+  const _totalCache = _cacheSnapshot.length
+  const _afterBlacklist = _cacheSnapshot.filter(id => !blacklistIds.includes(id)).length
+  let _afterAnnounce = 0
+  for (const id of _cacheSnapshot) {
+    if (blacklistIds.includes(id)) continue
+    const meta = global.allGroupsCache[id]
+    if (meta && meta.announce) {
+      const botIsAdmin = (meta.participants || []).some(p =>
+        p.admin && (p.id || '').split(':')[0].replace(/@.*$/, '') === _botNum
+      )
+      if (!botIsAdmin) continue
+    }
+    _afterAnnounce++
+  }
+  console.log(`[JPM-DIAG] Cache total: ${_totalCache} | Setelah blacklist: ${_afterBlacklist} | Setelah announce filter: ${_afterAnnounce}`)
 
-  // Loop: kirim ke semua grup valid yang ada di cache, termasuk yang baru masuk saat loop berjalan
+  const initialCount = _afterAnnounce
+  await m.reply(`⏳ Memproses JPM ${jenis}...\n📋 Target: *${initialCount}* grup (dari ${_totalCache} total)`)
+
+  // Loop: kirim ke semua grup valid yang ada di cache
+  let _stopReason = 'selesai'
+  let _failCount = 0
+  let _cacheChanges = 0
+  const _cacheAtStart = Object.keys(global.allGroupsCache || {}).length
+
   while (true) {
     if (global.stopjpm) {
       delete global.stopjpm
+      _stopReason = 'stopjpm'
       break
+    }
+
+    // [DIAG] Deteksi perubahan cache saat loop berjalan
+    const _currentCacheSize = Object.keys(global.allGroupsCache || {}).length
+    if (_currentCacheSize !== _cacheAtStart && _cacheChanges === 0) {
+      _cacheChanges = _currentCacheSize - _cacheAtStart
+      console.log(`[JPM-DIAG] ⚠️ Cache berubah saat loop! Awal: ${_cacheAtStart}, Sekarang: ${_currentCacheSize} (delta: ${_cacheChanges})`)
     }
 
     const groupId = getNextId()
 
     if (!groupId) {
       // Tidak ada grup lagi di cache — JPM selesai
+      _stopReason = 'habis'
+      console.log(`[JPM-DIAG] getNextId() null. seenIds: ${seenIds.size}, liveIds saat ini: ${Object.keys(global.allGroupsCache || {}).length}, skipBL: ${_skipBlacklist}, skipAnnounce: ${_skipAnnounce}`)
       break
     }
 
     seenIds.add(groupId)
     i++
+    _sentAttempt++
 
     try {
       await NXL.sendMessage(groupId, global.messageJpm, { quoted: FakeChannel })
@@ -1952,9 +1988,11 @@ case "jasher": case "jpm": case "jaser": {
       // Reset circuit breaker setelah sukses
       _jpmConsecutiveErrors = 0
     } catch (err) {
-      console.error(`Gagal kirim ke grup ${groupId}:`, err)
-      // [FIX] Circuit breaker: deteksi rate limit (429/428/500)
+      _failCount++
+      const errMsg = err?.message || String(err)
       const statusCode = err?.output?.statusCode || err?.data?.statusCode || err?.statusCode || 0
+      console.error(`[JPM-DIAG] Gagal #${_failCount} ke ${groupId}: status=${statusCode} msg=${errMsg.slice(0, 100)}`)
+      // [FIX] Circuit breaker: deteksi rate limit (429/428/500)
       const isRateLimit = statusCode === 429 || statusCode === 428
         || (statusCode === 500 && /429|rate/i.test(String(err?.data || err?.message || '')))
         || /rate.?overlimit|too many/i.test(String(err?.message || ''))
@@ -1962,7 +2000,7 @@ case "jasher": case "jpm": case "jaser": {
         _jpmConsecutiveErrors++
         if (_jpmConsecutiveErrors >= 3) {
           // Cooldown: pause 30 detik dengan polling 1s agar .stopjpm bisa interrupt
-          console.log(`[JPM] Rate limit terdeteksi ${_jpmConsecutiveErrors}x berturut — cooldown 30 detik...`)
+          console.log(`[JPM-DIAG] Rate limit ${_jpmConsecutiveErrors}x — cooldown 30s...`)
           for (let _cd = 0; _cd < 30; _cd++) {
             if (global.stopjpm) break
             await new Promise(r => setTimeout(r, 1000))
@@ -1972,9 +2010,24 @@ case "jasher": case "jpm": case "jaser": {
       }
     }
 
-    // Delay — hanya jika masih ada grup berikutnya
-    const hasMore = getNextId() !== null
-    if (hasMore) {
+    // Delay — cek apakah masih ada grup selanjutnya TANPA side effect
+    // Peek: cek apakah ada ID yang belum di seenIds dan bukan blacklist/announce
+    const _peekIds = Object.keys(global.allGroupsCache || {})
+    let _hasMore = false
+    for (const _pid of _peekIds) {
+      if (seenIds.has(_pid)) continue
+      if (blacklistIds.includes(_pid)) continue
+      const _pmeta = global.allGroupsCache[_pid]
+      if (_pmeta && _pmeta.announce) {
+        const _pBotAdmin = (_pmeta.participants || []).some(p =>
+          p.admin && (p.id || '').split(':')[0].replace(/@.*$/, '') === _botNum
+        )
+        if (!_pBotAdmin) continue
+      }
+      _hasMore = true
+      break
+    }
+    if (_hasMore) {
       await new Promise(r => setTimeout(r, global.JedaJpm || 5000))
     }
   }
@@ -1982,10 +2035,13 @@ case "jasher": case "jpm": case "jaser": {
   const totalTarget = seenIds.size
   const skipped = Object.keys(global.allGroupsCache || {}).filter(id => blacklistIds.includes(id)).length
 
+  // [DIAG] Log ringkasan akhir
+  console.log(`[JPM-DIAG] === SELESAI === Alasan: ${_stopReason} | Sent: ${_sentAttempt} | OK: ${successCount} | Fail: ${_failCount} | SkipBL: ${_skipBlacklist} | SkipAnnounce: ${_skipAnnounce} | seenIds: ${seenIds.size} | cacheNow: ${Object.keys(global.allGroupsCache || {}).length}`)
+
   if (mediaPath) fs.unlinkSync(mediaPath)
   delete global.statusjpm
   await NXL.sendMessage(senderChat, {
-    text: `✅ JPM ${jenis} selesai!\nTerkirim ke *${successCount}/${totalTarget}* grup.\n${skipped > 0 ? `⛔ Di-skip blacklist: *${skipped}* grup` : ''}`
+    text: `✅ JPM ${jenis} selesai!\nTerkirim ke *${successCount}/${_sentAttempt}* grup.\n${_failCount > 0 ? `❌ Gagal: *${_failCount}*\n` : ''}${_skipAnnounce > 0 ? `🔇 Skip announce: *${_skipAnnounce}*\n` : ''}${_skipBlacklist > 0 ? `⛔ Skip blacklist: *${_skipBlacklist}*\n` : ''}${_stopReason === 'stopjpm' ? '⛔ Dihentikan oleh owner' : ''}`
   }, { quoted: m })
 }
 break

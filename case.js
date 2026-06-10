@@ -1927,7 +1927,7 @@ case "jasher": case "jpm": case "jaser": {
   }
 
   const initialCount = Object.keys(allGroups).filter(id => !blacklistIds.includes(id)).length
-  await m.reply(`⏳ Memproses JPM ${jenis}...\n📋 Tersedia saat ini: *${initialCount}* grup${global.allGroupsFetching ? ' (prefetch masih berjalan...)' : ''}`)
+  await m.reply(`⏳ Memproses JPM ${jenis}...\n📋 Target: *${initialCount}* grup`)
 
   // Loop: kirim ke semua grup valid yang ada di cache, termasuk yang baru masuk saat loop berjalan
   while (true) {
@@ -1939,13 +1939,7 @@ case "jasher": case "jpm": case "jaser": {
     const groupId = getNextId()
 
     if (!groupId) {
-      // Tidak ada grup baru saat ini — cek apakah fetch masih berjalan
-      if (global.allGroupsFetching) {
-        // Tunggu sebentar lalu cek lagi — grup baru mungkin akan masuk
-        await new Promise(r => setTimeout(r, 500))
-        continue
-      }
-      // Fetch sudah selesai dan tidak ada lagi grup baru — broadcast selesai
+      // Tidak ada grup lagi di cache — JPM selesai
       break
     }
 
@@ -1978,8 +1972,8 @@ case "jasher": case "jpm": case "jaser": {
       }
     }
 
-    // Delay — hanya jika masih ada grup berikutnya (cek cepat)
-    const hasMore = getNextId() !== null || global.allGroupsFetching
+    // Delay — hanya jika masih ada grup berikutnya
+    const hasMore = getNextId() !== null
     if (hasMore) {
       await new Promise(r => setTimeout(r, global.JedaJpm || 5000))
     }

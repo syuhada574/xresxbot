@@ -87,152 +87,82 @@ let _reconnectDelay = 3000
 let _reconnectTimer = null
 let _isConnecting = false
 
-// ── GROUP CACHE PREFETCHER ────────────────────────────────────
-// Preload semua grup ke cache segera setelah bot ready
-// sehingga JPM tidak perlu nunggu groupFetchAllParticipating saat command dikirim
-const ALL_GROUPS_CACHE_TTL = 5 * 60 * 1000 // 5 menit
-const JPM_START_THRESHOLD  = 1              // mulai JPM segera ada minimal 1 grup valid di cache
+// ── GROUP CACHE SYSTEM ────────────────────────────────────────
+// Cache grup yang TIDAK PERNAH di-reset ke {} — hanya overwrite/update.
+// JPM selalu menggunakan cache yang ada tanpa menunggu prefetch.
+// Prefetch berjalan di background untuk keep cache fresh.
 
-// ── INCREMENTAL GROUP CACHE ───────────────────────────────────
-// global.allGroupsCache       = {} | null   — hasil fetch sementara yang terus bertambah
-// global.allGroupsCacheTime   = number      — timestamp saat fetch selesai PENUH
-// global.allGroupsFetching    = boolean     — true saat prefetch sedang berjalan
-// global.allGroupsReady       = EventEmitter — dipakai JPM untuk subscribe threshold event
-
-const EventEmitter = require('events')
-
-// Satu emitter global — dibuat sekali, tidak perlu di-reset tiap reconnect
-if (!global._groupsEmitter) global._groupsEmitter = new EventEmitter()
-global._groupsEmitter.setMaxListeners(30)
-
-// Prefetch incremental: isi allGroupsCache bertahap, emit 'threshold' dan 'done'
+// Prefetch background: overwrite cache existing, tidak pernah reset
 async function prefetchAllGroups(conn) {
 	if (global.allGroupsFetching) return   // sudah ada yang jalan, skip
 	global.allGroupsFetching = true
-	global.allGroupsCache = global.allGroupsCache || {}
 
 	try {
-		console.log(chalk.cyan('[PREFETCH] Memuat daftar grup ke cache (incremental)...'))
+		console.log(chalk.cyan('[PREFETCH] Memperbarui cache grup di background...'))
 
-		// groupFetchAllParticipating mengembalikan semua grup sekaligus sebagai object.
-		// Kita wrap dengan timeout, lalu emit threshold saat partial fill jika tersedia.
 		const fetchPromise = conn.groupFetchAllParticipating()
 
-		// Race: jika 30 detik tidak selesai, lempar error
+		// Timeout 30 detik
 		const groups = await Promise.race([
 			fetchPromise,
 			new Promise((_, rej) => setTimeout(() => rej(new Error('prefetch timeout')), 30000))
 		])
 
-		// Baileys mengembalikan semua sekaligus — kita masukkan per-batch ke cache
-		// agar JPM yang menunggu threshold bisa mulai sesegera mungkin
+		// Overwrite cache — TIDAK reset ke {} terlebih dahulu
+		// Grup lama yang sudah tidak ada akan tetap di cache sampai di-overwrite
+		if (!global.allGroupsCache) global.allGroupsCache = {}
 		const entries = Object.entries(groups)
-		const BATCH = 5   // masukkan 5 grup per tick agar event loop tidak tersumbat
+		for (const [id, meta] of entries) {
+			global.allGroupsCache[id] = meta
+		}
 
-		for (let i = 0; i < entries.length; i += BATCH) {
-			const slice = entries.slice(i, i + BATCH)
-			for (const [id, meta] of slice) {
-				global.allGroupsCache[id] = meta
-			}
-			const filled = Object.keys(global.allGroupsCache).length
-			// Emit threshold setelah batch pertama yang memenuhi minimum
-			if (filled >= JPM_START_THRESHOLD) {
-				global._groupsEmitter.emit('threshold')
-			}
-			// Yield ke event loop antar batch
-			await new Promise(r => setImmediate(r))
+		// Hapus grup yang sudah tidak ada di hasil fetch terbaru
+		const freshIds = new Set(Object.keys(groups))
+		for (const id of Object.keys(global.allGroupsCache)) {
+			if (!freshIds.has(id)) delete global.allGroupsCache[id]
 		}
 
 		global.allGroupsCacheTime = Date.now()
 		global.allGroupsFetching  = false
-		global._groupsEmitter.emit('done')
-		console.log(chalk.cyan(`[PREFETCH] Cache grup selesai: ${Object.keys(global.allGroupsCache).length} grup.`))
+		console.log(chalk.cyan(`[PREFETCH] Cache grup diperbarui: ${Object.keys(global.allGroupsCache).length} grup.`))
 
 	} catch (e) {
-		console.log(chalk.yellow(`[PREFETCH] Gagal memuat cache grup: ${e.message}`))
+		console.log(chalk.yellow(`[PREFETCH] Gagal memperbarui cache grup: ${e.message}`))
 		global.allGroupsFetching = false
-		global.allGroupsCacheTime = 0
-		global._groupsEmitter.emit('error', e)
+		// TIDAK reset allGroupsCacheTime — cache lama tetap valid untuk JPM
 	}
-}
-
-// Tunggu sampai threshold terpenuhi atau fetch selesai, lalu kembalikan cache saat itu
-// Jika cache sudah fresh dan cukup besar, return langsung (0ms)
-async function waitForGroupThreshold(thresholdMs = 20000) {
-	const now = Date.now()
-	const cacheAge = now - (global.allGroupsCacheTime || 0)
-	const cacheSize = Object.keys(global.allGroupsCache || {}).length
-
-	// Cache masih fresh dan lengkap — return instan
-	if (global.allGroupsCache && cacheAge < ALL_GROUPS_CACHE_TTL && !global.allGroupsFetching) {
-		return global.allGroupsCache
-	}
-
-	// Cache sudah punya cukup grup meski fetch belum selesai — return segera
-	if (cacheSize >= JPM_START_THRESHOLD) {
-		// Pastikan sisa fetch tetap jalan di background (sudah dijalankan oleh pemanggil)
-		return global.allGroupsCache
-	}
-
-	// Belum cukup grup — tunggu event threshold atau done atau timeout
-	return new Promise((resolve, reject) => {
-		const timer = setTimeout(() => {
-			cleanup()
-			// Kembalikan apa yang ada meski belum threshold — jangan blok JPM selamanya
-			if (global.allGroupsCache && Object.keys(global.allGroupsCache).length > 0) {
-				resolve(global.allGroupsCache)
-			} else {
-				reject(new Error('Timeout menunggu daftar grup. Coba lagi dalam beberapa detik.'))
-			}
-		}, thresholdMs)
-
-		const onThreshold = () => { cleanup(); resolve(global.allGroupsCache) }
-		const onDone      = () => { cleanup(); resolve(global.allGroupsCache) }
-		const onError     = (e) => {
-			cleanup()
-			if (global.allGroupsCache && Object.keys(global.allGroupsCache).length > 0) {
-				resolve(global.allGroupsCache)   // ada sebagian grup — tetap lanjut
-			} else {
-				reject(e)
-			}
-		}
-
-		function cleanup() {
-			clearTimeout(timer)
-			global._groupsEmitter.off('threshold', onThreshold)
-			global._groupsEmitter.off('done', onDone)
-			global._groupsEmitter.off('error', onError)
-		}
-
-		global._groupsEmitter.once('threshold', onThreshold)
-		global._groupsEmitter.once('done', onDone)
-		global._groupsEmitter.once('error', onError)
-	})
 }
 
 // Entry point untuk case.js — dipanggil via global.getGroupsCached()
+// TIDAK PERNAH BLOCKING. Selalu return cache yang ada (meski stale).
+// Jika cache kosong (bot baru pertama start), baru tunggu fetch pertama.
 async function getGroupsCached(conn) {
-	const now = Date.now()
-	const cacheAge = now - (global.allGroupsCacheTime || 0)
 	const cacheSize = Object.keys(global.allGroupsCache || {}).length
 
-	// Kasus 1: cache fresh dan lengkap — return instan (0ms)
-	if (global.allGroupsCache && cacheAge < ALL_GROUPS_CACHE_TTL && !global.allGroupsFetching) {
+	// Cache ada isinya — return INSTAN, tidak peduli expired atau sedang fetch
+	if (cacheSize > 0) {
+		// Trigger background refresh jika cache sudah lama (>5 menit) — non-blocking
+		const cacheAge = Date.now() - (global.allGroupsCacheTime || 0)
+		if (cacheAge > 5 * 60 * 1000 && !global.allGroupsFetching) {
+			prefetchAllGroups(conn).catch(() => {})
+		}
 		return global.allGroupsCache
 	}
 
-	// Kasus 2: fetch sedang berjalan, cache sudah punya cukup grup — return sekarang
-	if (global.allGroupsFetching && cacheSize >= JPM_START_THRESHOLD) {
-		return global.allGroupsCache
-	}
-
-	// Kasus 3: cache expired atau kosong — mulai fetch baru, tunggu threshold
+	// Cache benar-benar kosong (pertama kali start) — harus fetch dulu
 	if (!global.allGroupsFetching) {
-		global.allGroupsCache = {}   // reset untuk fetch baru
-		prefetchAllGroups(conn)      // jalankan di background, tidak di-await
+		prefetchAllGroups(conn).catch(() => {})
 	}
 
-	return waitForGroupThreshold(20000)
+	// Tunggu sampai ada minimal 1 grup masuk cache (max 20 detik)
+	const start = Date.now()
+	while (Object.keys(global.allGroupsCache || {}).length === 0) {
+		if (Date.now() - start > 20000) {
+			throw new Error('Timeout menunggu daftar grup. Bot mungkin belum siap.')
+		}
+		await new Promise(r => setTimeout(r, 500))
+	}
+	return global.allGroupsCache
 }
 
 function scheduleReconnect(label = '') {
@@ -348,8 +278,8 @@ NXL.ev.on('connection.update', async (update) => {
 			global.stopswgc = false
 			// [FIX] botReady=false dulu — JPM tidak boleh berjalan sampai socket benar-benar stabil
 			global.botReady = false
-			// Invalidate group cache saat reconnect — data lama mungkin stale
-			global.allGroupsCache = {}
+			// Mark cache sebagai stale — TIDAK reset ke {}
+			// Cache lama tetap tersedia untuk JPM, akan di-overwrite oleh prefetch berikutnya
 			global.allGroupsCacheTime = 0
 			global.allGroupsFetching  = false
 			// [OPT] Reset cached JIDs — bisa berubah jika session baru
@@ -503,6 +433,17 @@ NXL.ev.on('contacts.update', (update) => {
 	
 NXL.ev.on('group-participants.update', async (update) => {
 const { id, author, participants, action } = update
+
+	// ── EVENT-DRIVEN CACHE UPDATE: participants ──────────────────
+	// Update cache saat member join/leave/promote/demote
+	try {
+		if (global.allGroupsCache?.[id]) {
+			// Refresh metadata grup ini saja (ringan — 1 grup)
+			const freshMeta = await NXL.groupMetadata(id).catch(() => null)
+			if (freshMeta) global.allGroupsCache[id] = freshMeta
+		}
+	} catch {}
+
 	try {
   const qtext = {
     key: {
@@ -676,6 +617,17 @@ await NXL.sendMessage(jid, { sticker: { url: buffer }, ...options }, { quoted })
 return buffer}
 
 NXL.ev.on('groups.update', async (update) => {
+		// ── EVENT-DRIVEN CACHE UPDATE ──────────────────────────────────
+		// Update allGroupsCache secara inkremental saat grup berubah (subject, announce, dll)
+		try {
+			for (const data of update) {
+				if (data?.id && global.allGroupsCache?.[data.id]) {
+					// Merge perubahan ke cache existing
+					Object.assign(global.allGroupsCache[data.id], data)
+				}
+			}
+		} catch {}
+
 		try {
 		// Kalau notifGrup off, skip semua notifikasi perubahan grup
 		if (global.notifGrup === false) return
@@ -766,17 +718,15 @@ setInterval(() => {
 }, 10 * 60 * 1000)
 
 // ── GROUP CACHE BACKGROUND REFRESH ────────────────────────────
-// Refresh allGroupsCache tiap 4 menit (sebelum TTL 5 menit habis)
-// Jadi saat JPM dipanggil, cache selalu fresh dan tidak perlu fetch
+// Refresh allGroupsCache tiap 10 menit (safety net — event-driven biasanya sudah cukup)
 setInterval(() => {
 	if (global.botReady && global._nxlConn) {
 		const age = Date.now() - (global.allGroupsCacheTime || 0)
-		// Refresh jika cache sudah lebih dari 3.5 menit
-		if (age > 3.5 * 60 * 1000) {
+		if (age > 10 * 60 * 1000) {
 			prefetchAllGroups(global._nxlConn).catch(() => {})
 		}
 	}
-}, 4 * 60 * 1000)
+}, 10 * 60 * 1000)
 
 // ── GLOBAL ERROR GUARD ────────────────────────────────────────
 process.on('uncaughtException', (err) => {

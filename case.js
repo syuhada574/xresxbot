@@ -1842,6 +1842,11 @@ case "jpmch": {
 
   if (mediaPath) fs.unlinkSync(mediaPath)
   delete global.statusjpm
+  // Jalankan pending refresh jika ada
+  if (global.pendingGroupsRefresh && global._nxlConn) {
+    global.pendingGroupsRefresh = false
+    global.prefetchAllGroups().catch(() => {})
+  }
 
   await m.reply(`✅ JPM Channel selesai!\nTerkirim ke *${successCount}/${channelList.length}* Channel.`)
 }
@@ -1919,6 +1924,11 @@ case "jasher": case "jpm": case "jaser": {
 
   if (mediaPath) fs.unlinkSync(mediaPath)
   delete global.statusjpm
+  // Jalankan pending refresh jika ada
+  if (global.pendingGroupsRefresh && global._nxlConn) {
+    global.pendingGroupsRefresh = false
+    global.prefetchAllGroups().catch(() => {})
+  }
   await NXL.sendMessage(senderChat, {
     text: `✅ JPM ${jenis} selesai!\nTerkirim ke *${successCount}/${filteredGroupIds.length}* grup.\n${skipped > 0 ? `⛔ Di-skip blacklist: *${skipped}* grup` : ''}`
   }, { quoted: m })
@@ -1985,6 +1995,11 @@ case "jpmht": {
 
   if (mediaPath) fs.unlinkSync(mediaPath)
   delete global.statusjpm
+  // Jalankan pending refresh jika ada
+  if (global.pendingGroupsRefresh && global._nxlConn) {
+    global.pendingGroupsRefresh = false
+    global.prefetchAllGroups().catch(() => {})
+  }
   await NXL.sendMessage(senderChat, {
     text: `✅ JPM Hidetag ${jenis} selesai!\nTerkirim ke *${successCount}/${filteredGroupIds.length}* grup.\n${skipped > 0 ? `⛔ Di-skip blacklist: *${skipped}* grup` : ''}`
   }, { quoted: m })

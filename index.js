@@ -88,8 +88,7 @@ let _reconnectTimer = null
 let _isConnecting = false
 
 // ── GROUP CACHE ───────────────────────────────────────────────
-// sehingga JPM tidak perlu nunggu groupFetchAllParticipating saat command dikirim
-const ALL_GROUPS_CACHE_TTL = 5 * 60 * 1000 // 5 menit
+// Prefetch saat bot connect — JPM selalu pakai cache tanpa fetch ulang
 
 async function prefetchAllGroups(conn) {
 	try {
@@ -103,18 +102,17 @@ async function prefetchAllGroups(conn) {
 		console.log(chalk.cyan(`[PREFETCH] Cache grup siap: ${Object.keys(groups).length} grup.`))
 	} catch (e) {
 		console.log(chalk.yellow(`[PREFETCH] Gagal memuat cache grup: ${e.message}`))
-		global.allGroupsCache = null
-		global.allGroupsCacheTime = 0
+		// TIDAK nullify cache — biarkan cache lama jika ada
 	}
 }
 
-// Helper: ambil semua grup dari cache jika masih fresh, atau fetch ulang
+// Helper: return cache langsung jika ada, fetch hanya jika cache benar-benar kosong
 async function getGroupsCached(conn) {
-	const now = Date.now()
-	if (global.allGroupsCache && (now - (global.allGroupsCacheTime || 0)) < ALL_GROUPS_CACHE_TTL) {
+	// Cache tersedia — return INSTAN tanpa cek TTL
+	if (global.allGroupsCache) {
 		return global.allGroupsCache
 	}
-	// Cache expired atau kosong — fetch fresh dan update cache
+	// Cache null (pertama kali start / prefetch gagal) — fetch blocking sekali
 	const groups = await Promise.race([
 		conn.groupFetchAllParticipating(),
 		new Promise((_, rej) => setTimeout(() => rej(new Error('groupFetchAllParticipating timeout')), 20000))
@@ -237,8 +235,8 @@ NXL.ev.on('connection.update', async (update) => {
 			global.stopswgc = false
 			// [FIX] botReady=false dulu — JPM tidak boleh berjalan sampai socket benar-benar stabil
 			global.botReady = false
-			// Invalidate group cache saat reconnect — data lama mungkin stale
-			global.allGroupsCache = null
+			// Cache grup TIDAK di-nullify — biarkan cache lama agar JPM bisa langsung pakai
+			// Prefetch akan update cache di background setelah botReady
 			global.allGroupsCacheTime = 0
 			// [OPT] Reset cached JIDs — bisa berubah jika session baru
 			global._cachedBotNumber    = null
@@ -282,6 +280,8 @@ global._nxlConn = NXL
 global.sleep = (ms) => new Promise(r => setTimeout(r, ms))
 // [OPT] Expose getGroupsCached ke global agar JPM pakai cache, bukan fetch ulang setiap saat
 global.getGroupsCached = () => getGroupsCached(NXL)
+// [OPT] Expose prefetchAllGroups ke global agar case.js bisa trigger pending refresh setelah JPM selesai
+global.prefetchAllGroups = () => prefetchAllGroups(NXL)
 
 // Baca mode tersimpan dari database/botmode.json saat restart
 // Kalau file ada → pakai mode yang terakhir disimpan
@@ -654,17 +654,21 @@ setInterval(() => {
 }, 10 * 60 * 1000)
 
 // ── GROUP CACHE BACKGROUND REFRESH ────────────────────────────
-// Refresh allGroupsCache tiap 4 menit (sebelum TTL 5 menit habis)
-// Jadi saat JPM dipanggil, cache selalu fresh dan tidak perlu fetch
+// Refresh cache grup setiap 6 jam — safety update agar data tidak terlalu stale
+// TIDAK boleh berjalan saat JPM aktif — ditandai pending dan dijalankan setelah JPM selesai
 setInterval(() => {
 	if (global.botReady && global._nxlConn) {
+		// Jika JPM sedang berjalan — tandai pending, jangan refresh sekarang
+		if (global.statusjpm) {
+			global.pendingGroupsRefresh = true
+			return
+		}
 		const age = Date.now() - (global.allGroupsCacheTime || 0)
-		// Refresh jika cache sudah lebih dari 3.5 menit
-		if (age > 3.5 * 60 * 1000) {
+		if (age > 6 * 60 * 60 * 1000) {
 			prefetchAllGroups(global._nxlConn).catch(() => {})
 		}
 	}
-}, 4 * 60 * 1000)
+}, 6 * 60 * 60 * 1000)
 
 // ── GLOBAL ERROR GUARD ────────────────────────────────────────
 process.on('uncaughtException', (err) => {

@@ -1623,7 +1623,7 @@ break;
 case "add": {
   if (!m.isGroup) return m.reply(mess.group);
   if (!isCreator && !m.isAdmin) return m.reply(mess.admin);
-  if (!!isAdmins) return m.reply(mess.botadmin);
+  if (!isBotAdmins) return m.reply(mess.botadmin);
   if (!text && !m?.quoted) return m.reply('Masukkan nomor yang ingin ditambahkan')
 
   let users = m?.quoted ? m?.quoted.sender : text.replace(/[^0-9]/g, '') + '@s.whatsapp.net'
@@ -1644,7 +1644,7 @@ case "kick":
 case "kik": {
   if (!m.isGroup) return m.reply(mess.group);
   if (!isCreator && !m.isAdmin) return m.reply(mess.admin);
-  if (!!isAdmins) return m.reply(mess.botadmin);
+  if (!isBotAdmins) return m.reply(mess.botadmin);
 
   let target;
 
@@ -1678,7 +1678,7 @@ case "opengc":
 case "open": {
   if (!m.isGroup) return m.reply(mess.group);
   if (!isCreator && !m.isAdmin) return m.reply(mess.admin);
-  if (!!isAdmins) return m.reply(mess.botadmin);
+  if (!isBotAdmins) return m.reply(mess.botadmin);
 
   try {
     if (command === "open" || command === "opengc") {

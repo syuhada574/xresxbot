@@ -3315,7 +3315,7 @@ case 'caratt': {
 
   try {
     const res = await axios.get(
-      `https://tikwm.com/api/feed/search?keywords=${encodeURIComponent(text)}&count=10&cursor=0&hd=1`,
+      `https://tikwm.com/api/feed/search?keywords=${encodeURIComponent(text)}&count=30&cursor=0&hd=1`,
       { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 20000 }
     )
 
@@ -3325,7 +3325,7 @@ case 'caratt': {
       return m.reply('❌ Video tidak ditemukan untuk: ' + text)
     }
 
-    const results = items.sort((a, b) => (b.play_count || 0) - (a.play_count || 0)).slice(0, 3)
+    const results = items.sort((a, b) => (b.play_count || 0) - (a.play_count || 0)).slice(0, 5)
 
     await m.reply(`✅ Ditemukan ${items.length} video, mengunduh ${results.length} teratas...`)
 
@@ -5189,11 +5189,144 @@ case "artinama": {
 }
 break
 
-case "cekbeban": case "cekbucin": case "cekfemboy": case "cekgay": case "cekjodoh": case "cekjones": case "cekkaya": case "cekkodam": case "cekmasadepan": case "ceksange": case "cekstress": case "cekwibu": {
-  const cekTarget = m.mentionedJid?.[0] ? `@${m.mentionedJid[0].split('@')[0]}` : m.quoted ? `@${m.quoted.sender.split('@')[0]}` : text || pushname
+case "cekkodam": {
+  // [PATCH] cekkodam diubah: tidak pakai persen, tapi random nama kodam + level + deskripsi
+  const _resolveFunJid = (jid) => {
+    if (!jid) return null
+    const rawNum = jid.replace(/@.*$/, '')
+    if (participants && participants.length) {
+      if (jid.includes('@lid') || !jid.includes('@s.whatsapp.net')) {
+        const found = participants.find(p => (p.lid || p.id || '').replace(/@.*$/, '') === rawNum)
+        if (found && found.jid) return found.jid.replace(/@.*$/, '') + '@s.whatsapp.net'
+        if (found && found.id && found.id.includes('@s.whatsapp.net')) return found.id
+      }
+      const found = participants.find(p => (p.jid || p.id || '').replace(/@.*$/, '') === rawNum)
+      if (found) return (found.jid || found.id).replace(/@.*$/, '') + '@s.whatsapp.net'
+    }
+    return rawNum + '@s.whatsapp.net'
+  }
+  let kodamRaw = m.mentionedJid?.[0] || (m.quoted ? m.quoted.sender : null) || (text ? text.replace(/[^0-9]/g,'') + '@s.whatsapp.net' : null) || m.sender
+  const kodamTarget = _resolveFunJid(kodamRaw)
+  const kodamNum = kodamTarget ? kodamTarget.split('@')[0] : (text || pushname)
+  const namaKodam = ['Naga Hitam Selatan','Macan Putih Bersurai','Ular Sakti Bukit Tinggi','Khodam Nyi Roro Kidul','Singa Padang Pasir','Garuda Emas Nusantara','Buaya Putih Kalimantan','Harimau Loreng Sumatera','Elang Jawa Bermahkota','Kebo Bule Keraton','Macan Kumbang Hutan Larangan','Ratu Lebah Madu','Serigala Bulan Purnama','Kucing Candramawa','Burung Hantu Penjaga Malam']
+  const levelKodam = ['Lemah (baru bangun)','Menengah (mulai mengikuti)','Kuat (setia menjaga)','Sangat Kuat (turun-temurun)','Legendaris (pusaka leluhur)']
+  const sifatKodam = ['suka menjaga rezeki','pelindung dari santet','pembuka aura pengasihan','penangkal energi negatif','penambah wibawa','pembawa keberuntungan judi (jangan!)','penjaga saat tidur','pendamping perjalanan jauh']
+  const pickK = a => a[Math.floor(Math.random()*a.length)]
+  await NXL.sendMessage(m.chat, {
+    text: `🔮 *CEK KHODAM*\n\n👤 @${kodamNum}\n\n🐉 Khodam: *${pickK(namaKodam)}*\n⚡ Level: *${pickK(levelKodam)}*\n📜 Sifat: _${pickK(sifatKodam)}_\n\n_⚠️ Hiburan semata, jangan dipercaya._`,
+    mentions: kodamTarget ? [kodamTarget] : []
+  }, { quoted: m })
+}
+break
+
+case "cekbeban": case "cekbucin": case "cekfemboy": case "cekgay": case "cekjodoh": case "cekjones": case "cekkaya": case "cekmasadepan": case "ceksange": case "cekstress": case "cekwibu": {
+  // [PATCH] Resolve LID → nomor asli + mentions aktif + komentar dinamis per tier
+  const _resolveFunJid = (jid) => {
+    if (!jid) return null
+    const rawNum = jid.replace(/@.*$/, '')
+    if (participants && participants.length) {
+      if (jid.includes('@lid') || !jid.includes('@s.whatsapp.net')) {
+        const found = participants.find(p => (p.lid || p.id || '').replace(/@.*$/, '') === rawNum)
+        if (found && found.jid) return found.jid.replace(/@.*$/, '') + '@s.whatsapp.net'
+        if (found && found.id && found.id.includes('@s.whatsapp.net')) return found.id
+      }
+      const found = participants.find(p => (p.jid || p.id || '').replace(/@.*$/, '') === rawNum)
+      if (found) return (found.jid || found.id).replace(/@.*$/, '') + '@s.whatsapp.net'
+    }
+    return rawNum + '@s.whatsapp.net'
+  }
+  let cekRaw = m.mentionedJid?.[0] || (m.quoted ? m.quoted.sender : null) || (text ? text.replace(/[^0-9]/g,'') + '@s.whatsapp.net' : null) || m.sender
+  const cekTargetJid = _resolveFunJid(cekRaw)
+  const cekNum = cekTargetJid ? cekTargetJid.split('@')[0] : (text || pushname)
   const cekPersen = Math.floor(Math.random()*101)
-  const cekLabels = {cekbeban:'Beban',cekbucin:'Bucin',cekfemboy:'Femboy',cekgay:'Gay',cekjodoh:'Jodoh',cekjones:'Jomblo Ngenes',cekkaya:'Kaya',cekkodam:'Kodam',cekmasadepan:'Masa Depan Cerah',ceksange:'Sange',cekstress:'Stress',cekwibu:'Wibu'}
-  m.reply(`🔍 *Cek ${cekLabels[command]||command}*\n\n👤 ${cekTarget}\n📊 Hasil: *${cekPersen}%*\n${'█'.repeat(Math.floor(cekPersen/10))}${'░'.repeat(10-Math.floor(cekPersen/10))}`)
+  const cekLabels = {cekbeban:'Beban',cekbucin:'Bucin',cekfemboy:'Femboy',cekgay:'Gay',cekjodoh:'Jodoh',cekjones:'Jomblo Ngenes',cekkaya:'Kaya',cekmasadepan:'Masa Depan Cerah',ceksange:'Sange',cekstress:'Stress',cekwibu:'Wibu'}
+  // Tier komentar: index 0 = 0-20, 1 = 21-40, 2 = 41-60, 3 = 61-80, 4 = 81-100
+  const cekKomentar = {
+    cekjodoh: [
+      ['Waduh, susah nih kalau dipaksakan 😅','Kayaknya cuma sebatas teman deh.','Jodoh? Masih jauh perjalanannya.','Mending cari yang lain dulu deh 🥲','Belum ada chemistry sama sekali.'],
+      ['Masih bisa dicoba, tapi jalannya terjal.','Ada secercah harapan kecil.','Perlu usaha ekstra nih.','Lumayan, tapi jangan terlalu berharap.','50:50 condong ke ragu.'],
+      ['Lumayan cocok juga ternyata 👀','Ada potensi kalau dijaga.','Boleh lah, layak diperjuangkan.','Cukup nyambung kok kalian.','Tinggal pdkt dikit lagi.'],
+      ['Wih cocok nih, tinggal dijaga aja 😎','Hampir sempurna nih pasangan.','Tinggal nunggu momen yang tepat.','Kalian satu frekuensi kayaknya.','Restu tinggal selangkah lagi.'],
+      ['Buset, jodoh dari server sebelah 🔥','Ini tinggal nunggu undangan nikah 😭','Server sudah merestui hubungan ini 😎','Soulmate level dewa! 💯','Langsung lamar aja gausah mikir 🔥']
+    ],
+    cekgay: [
+      ['Masih aman bro 😎','Lurus banget kayak penggaris.','100% normal, tenang aja.','Gak ada tanda-tanda sama sekali.','Aman terkendali bro 👍'],
+      ['Sedikit mencurigakan sih 🤔','Ada gelagat dikit nih.','Hmm, agak ragu juga.','Waspada level rendah.','Masih bisa diluruskan.'],
+      ['Setengah-setengah nih 👀','Bingung sendiri kayaknya.','Galau identitas detected.','Perlu introspeksi bro.','50:50 nih hasilnya.'],
+      ['Wih lumayan tinggi loh 😳','Mulai kelihatan nih gelagatnya.','Hampir full nih hasilnya.','Bro, ada yang perlu dibahas nih.','Tinggi juga ternyata 😏'],
+      ['Wanjir tinggi juga hasilnya 😭','Full color detected 🌈','Bro... kita perlu ngobrol 😳','Gak bisa disangkal lagi nih 🔥','Pelangi banget hasilnya 🏳️‍🌈']
+    ],
+    cekbeban: [
+      ['Bukan beban kok, kamu berguna 👍','Mandiri banget nih orangnya.','Aman, gak ngerepotin siapa-siapa.','Malah jadi tumpuan orang lain.','Beban? Enggak sama sekali.'],
+      ['Sedikit ngerepotin sih 😅','Kadang-kadang minta tolong mulu.','Beban tipis-tipis lah.','Masih wajar kok.','Ada lah dikit bebannya.'],
+      ['Lumayan jadi beban nih 🤔','Setengah mandiri setengah nyusahin.','Perlu belajar mandiri dikit.','50% beban keluarga.','Mulai ngerepotin nih.'],
+      ['Beban banget nih kamu 😭','Sering nyusahin orang sekitar.','Tinggi juga kadar bebannya.','Mulai bikin capek orang lain.','Hampir full beban 😩'],
+      ['Beban sejati level dewa 💀','Hidup numpang terus nih 😭','Beban keluarga, RT, RW, sekecamatan 🔥','Pure beban tanpa kompromi.','Juara umum beban nasional 🏆']
+    ],
+    cekbucin: [
+      ['Masih waras kok, gak bucin 😎','Kepala dingin, hati stabil.','Aman dari virus bucin.','Cinta secukupnya aja.','Gak lebay sama sekali.'],
+      ['Bucin tipis-tipis nih 😅','Kadang kangen dikit.','Masih bisa dikontrol.','Bucin level pemula.','Ada gejala ringan.'],
+      ['Lumayan bucin juga 👀','Setengah waras setengah bucin.','Mulai kepikiran terus.','50% pikiran ke dia.','Bucin menengah nih.'],
+      ['Bucin parah nih 😭','Chat dibalas langsung senyum.','Tinggi kadar bucinnya.','Hidup buat dia doang.','Hampir full bucin 😩'],
+      ['Bucin akut stadium 4 💀','Tiap detik mikirin dia 😭','Bucin sejati tanpa obat 🔥','Rela ngapain aja demi doi.','Raja/Ratu bucin sedunia 👑']
+    ],
+    cekkaya: [
+      ['Dompet lagi kering nih 😭','Saldo tinggal recehan.','Akhir bulan banget nih.','Kaya hati, miskin harta.','Lagi prihatin ya bro.'],
+      ['Cukup buat makan aja 😅','Pas-pasan lah hidupnya.','Gak kaya gak miskin.','Standar UMR nih.','Lumayan buat jajan.'],
+      ['Lumayan berada nih 👀','Sultan menengah detected.','Dompet aman terkendali.','Bisa traktir temen lah.','Ekonomi stabil.'],
+      ['Tajir juga nih kamu 😎','Sultan mulai kelihatan.','Rekening tebal nih.','Bisa beli yang dimau.','Hampir crazy rich.'],
+      ['Sultan sejati level dewa 🔥','Crazy rich Asia detected 💰','Uang bukan masalah buat lu 😎','Beli pulau aja bisa nih.','Konglomerat tanpa tanding 👑']
+    ],
+    cekjones: [
+      ['Gak jones kok, laku banget 😎','Banyak yang naksir nih.','Jauh dari kata jomblo.','PDKT mulu tiap minggu.','Laris manis nih orangnya.'],
+      ['Jones tipis-tipis 😅','Kadang sepi kadang rame.','Masih ada yang deketin.','Jomblo sementara aja.','Belum parah kok.'],
+      ['Lumayan jones juga 👀','Setengah laku setengah sepi.','Mulai jarang ada yang deketin.','50% peluang nih.','Jones menengah.'],
+      ['Jones parah nih 😭','Udah lama gak ada yang naksir.','Tinggi kadar jonesnya.','Notif chat cuma dari ojol.','Hampir jones abadi 😩'],
+      ['Jones abadi level dewa 💀','Jomblo sejak dalam kandungan 😭','Jones tanpa harapan 🔥','Kucing aja ninggalin lu.','Raja/Ratu jomblo sedunia 👑']
+    ],
+    cekstress: [
+      ['Santai banget hidupnya 😎','Pikiran adem ayem.','Zero stress detected.','Hidup tanpa beban.','Tenang kayak air danau.'],
+      ['Stress tipis-tipis 😅','Kadang pusing dikit.','Masih bisa rileks.','Stress ringan aja.','Ada tekanan kecil.'],
+      ['Lumayan stress juga 🤔','Setengah waras setengah pusing.','Mulai kepikiran banyak.','50% beban pikiran.','Stress menengah.'],
+      ['Stress parah nih 😭','Pikiran kemana-mana.','Tinggi kadar stressnya.','Butuh healing nih.','Hampir burnout 😩'],
+      ['Stress level dewa, healing sekarang! 💀','Pikiran udah mau meledak 😭','Stress akut butuh liburan 🔥','Otak overload total.','Mental health emergency 🚨']
+    ],
+    ceksange: [
+      ['Adem banget, pikiran bersih 😇','Suci kayak air zamzam.','Zero gairah detected.','Imannya kuat nih.','Pikiran jernih banget.'],
+      ['Sange tipis-tipis 😅','Kadang khilaf dikit.','Masih bisa nahan.','Level rendah kok.','Ada gejala ringan.'],
+      ['Lumayan sange juga 👀','Setengah suci setengah khilaf.','Mulai gak fokus nih.','50% pikiran kemana-mana.','Sange menengah.'],
+      ['Sange parah nih 😳','Pikiran mulai liar.','Tinggi kadarnya nih.','Butuh istighfar banyak.','Hampir khilaf total 😩'],
+      ['Sange level dewa, istighfar! 💀','Pikiran udah gak karuan 😭','Sange akut butuh wudhu 🔥','Astaghfirullah parah banget.','Juara umum khilaf nasional 🚨']
+    ],
+    cekmasadepan: [
+      ['Masa depan masih buram nih 😅','Perlu kerja keras lagi.','Belum kelihatan arahnya.','Banyak PR nih ke depan.','Jalan masih panjang.'],
+      ['Ada secercah harapan 🤔','Mulai keliatan dikit.','Perlu usaha ekstra.','Lumayan ada arah.','50:50 nih nasibnya.'],
+      ['Lumayan cerah kok 👀','Prospek bagus nih.','Ada potensi sukses.','Jalan mulai terbuka.','Cukup menjanjikan.'],
+      ['Cerah banget masa depannya 😎','Sukses udah di depan mata.','Tinggal konsisten aja.','Prospek gemilang nih.','Hampir pasti sukses.'],
+      ['Masa depan gemilang level dewa 🔥','Sukses dunia akhirat 💯','Calon orang besar nih 😎','Bersinar terang masa depannya ✨','Crazy rich masa depan 👑']
+    ],
+    cekwibu: [
+      ['Normal kok, gak wibu 😎','Belum kena virus anime.','Aman dari waifu.','Hidup di dunia nyata.','Zero wibu detected.'],
+      ['Wibu tipis-tipis 😅','Nonton anime kadang-kadang.','Masih casual nih.','Wibu level pemula.','Baru mulai keracunan.'],
+      ['Lumayan wibu juga 👀','Setengah normal setengah wibu.','Mulai punya waifu nih.','50% otak isi anime.','Wibu menengah.'],
+      ['Wibu parah nih 😭','Kamar penuh poster anime.','Tinggi kadar wibunya.','Ngomong campur bahasa Jepang.','Hampir full wibu 😩'],
+      ['Wibu sejati level dewa 🔥','Waifu lebih nyata dari pacar 😭','Wibu akut stadium akhir 🌸','Nihongo jouzu desu ne~ 🇯🇵','Raja/Ratu wibu sedunia 👑']
+    ],
+    cekfemboy: [
+      ['Manly banget, gak ada gejala 😎','Cowok sejati nih.','Maskulin level tinggi.','Aman terkendali bro.','Zero femboy detected.'],
+      ['Femboy tipis-tipis 😅','Ada sisi lembut dikit.','Masih maskulin kok.','Level rendah aja.','Gejala ringan.'],
+      ['Lumayan femboy juga 👀','Setengah manly setengah lembut.','Mulai keliatan nih.','50:50 hasilnya.','Femboy menengah.'],
+      ['Femboy tinggi nih 😳','Sisi lembut mulai dominan.','Tinggi juga hasilnya.','Hampir full nih.','Mulai dominan sifatnya.'],
+      ['Femboy level dewa 🔥','Lebih cantik dari cewek 😳','Femboy sejati detected 🌸','Uwu maksimal nih 😭','Juara umum femboy nasional 👑']
+    ]
+  }
+  const tierIdx = Math.min(4, Math.floor(cekPersen / 21))
+  const komenArr = cekKomentar[command] || [['Hasil keluar nih.'],['Lumayan.'],['Standar aja.'],['Lumayan tinggi.'],['Maksimal!']]
+  const komentar = (komenArr[tierIdx] || komenArr[komenArr.length-1])[Math.floor(Math.random() * (komenArr[tierIdx]||komenArr[komenArr.length-1]).length)]
+  await NXL.sendMessage(m.chat, {
+    text: `🔍 *Cek ${cekLabels[command]||command}*\n\n👤 @${cekNum}\n📊 Hasil: *${cekPersen}%*\n${'█'.repeat(Math.floor(cekPersen/10))}${'░'.repeat(10-Math.floor(cekPersen/10))}\n\n💬 ${komentar}`,
+    mentions: cekTargetJid ? [cekTargetJid] : []
+  }, { quoted: m })
 }
 break
 
@@ -5201,7 +5334,17 @@ case "kecocokanpasangan": {
   if (!text) return m.reply(`*Contoh:* ${command} nama1 & nama2`)
   const cocokNames = text.split(/[&,]/).map(n=>n.trim()).filter(Boolean)
   if (cocokNames.length<2) return m.reply(`*Contoh:* ${command} Andi & Siti`)
-  m.reply(`💕 *Kecocokan Pasangan*\n\n👤 ${cocokNames[0]} 💘 ${cocokNames[1]}\n📊 Kecocokan: *${Math.floor(Math.random()*101)}%*`)
+  const cocokPersen = Math.floor(Math.random()*101)
+  const cocokTier = [
+    ['Aduh, kayaknya beda dunia deh 😅','Cuma sebatas kenal aja nih.','Belum ada chemistry sama sekali.','Mending temenan aja deh 🥲','Susah kalau dipaksakan.'],
+    ['Masih bisa diusahakan kok 🤔','Ada harapan kecil nih.','Perlu pdkt lebih dalam.','Lumayan, jangan terlalu berharap.','50:50 condong ragu.'],
+    ['Lumayan cocok ternyata 👀','Ada potensi bagus nih.','Boleh lah dilanjut.','Cukup nyambung kalian.','Tinggal usaha dikit lagi.'],
+    ['Wih cocok banget nih 😎','Hampir sempurna pasangannya.','Tinggal dijaga aja.','Kalian satu frekuensi 👀','Restu tinggal selangkah.'],
+    ['Cocok banget kalian 🔥','Tinggal nunggu undangan nikah 😭','Server sudah merestui 😎','Soulmate level dewa 💯','Langsung lamar aja! 🔥']
+  ]
+  const cocokIdx = Math.min(4, Math.floor(cocokPersen / 21))
+  const cocokKomen = cocokTier[cocokIdx][Math.floor(Math.random()*cocokTier[cocokIdx].length)]
+  m.reply(`💕 *Kecocokan Pasangan*\n\n👤 ${cocokNames[0]} 💘 ${cocokNames[1]}\n📊 Kecocokan: *${cocokPersen}%*\n${'❤️'.repeat(Math.floor(cocokPersen/20))}${'🖤'.repeat(5-Math.floor(cocokPersen/20))}\n\n💬 ${cocokKomen}`)
 }
 break
 

@@ -1876,6 +1876,7 @@ break
 case "jasher": case "jpm": case "jaser": {
   if (!isCreator) return m.reply(mess.owner)
   if (global.statusjpm) return m.reply(`⚠️ JPM sedang berjalan, tunggu sampai selesai atau hentikan dengan .stopjpm`)
+  if (global.statusjpm2) return m.reply(`⚠️ JPM2 sedang berjalan, tunggu sampai selesai atau hentikan dengan .stopjpm2`)
   if (!text) return m.reply(`*Contoh :* ${command} pesannya & bisa dengan foto juga`)
   if (!global.botReady) return m.reply(`⏳ Bot baru saja reconnect, harap tunggu 20 detik lalu coba lagi.`)
 
@@ -5275,7 +5276,133 @@ case "nyerah": {
 }
 break
 
+// ═══ JPM2 & JPMTESTI — Porting murni dari Alip AI ═══
 
+case "jpm2": {
+  if (!isCreator) return m.reply(mess.owner)
+  if (global.statusjpm || global.statusjpm2) return m.reply('⚠️ JPM sedang berjalan! Tunggu selesai atau hentikan dengan .stopjpm2')
+  if (!text) return m.reply(`*Contoh:* ${command} pesannya & bisa dengan foto juga`)
+  if (!global.botReady) return m.reply('⏳ Bot baru reconnect, tunggu sebentar.')
+
+  let jpm2Media = null
+  if (/image/.test(mime)) {
+    jpm2Media = await NXL.downloadAndSaveMediaMessage(qmsg)
+  }
+
+  global.statusjpm2 = true
+
+  // Fetch langsung — TIDAK pakai cache
+  let jpm2Groups
+  try {
+    jpm2Groups = await Promise.race([
+      NXL.groupFetchAllParticipating(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000))
+    ])
+  } catch (e) {
+    delete global.statusjpm2
+    if (jpm2Media && fs.existsSync(jpm2Media)) fs.unlinkSync(jpm2Media)
+    return m.reply(`❌ Gagal fetch grup: ${e.message}`)
+  }
+
+  const jpm2Ids = Object.keys(jpm2Groups)
+
+  // Blacklist: gunakan blacklistjpm.json milik XresX
+  let jpm2BL = []
+  try { jpm2BL = loadBlacklistJpm() } catch { jpm2BL = [] }
+  const jpm2BLIds = jpm2BL.map(v => v.id)
+  const jpm2Filtered = jpm2Ids.filter(id => !jpm2BLIds.includes(id))
+  const jpm2Skipped = jpm2Ids.length - jpm2Filtered.length
+
+  const jpm2Content = jpm2Media
+    ? { image: fs.readFileSync(jpm2Media), caption: text }
+    : { text }
+
+  const jpm2Chat = m.chat
+  const jpm2Jenis = jpm2Media ? "teks & foto" : "teks"
+  await m.reply(`⏳ JPM2 (Alip-style) ${jpm2Jenis}\n📋 Target: *${jpm2Filtered.length}* grup\n${jpm2Skipped > 0 ? `⛔ Skip blacklist: *${jpm2Skipped}*` : ''}`)
+
+  let jpm2Count = 0
+  for (let i = 0; i < jpm2Filtered.length; i++) {
+    if (global.stopjpm2) { delete global.stopjpm2; break }
+    try {
+      await NXL.sendMessage(jpm2Filtered[i], jpm2Content, { quoted: FakeChannel })
+      jpm2Count++
+    } catch {}
+    if (i < jpm2Filtered.length - 1) {
+      await new Promise(r => setTimeout(r, global.JedaJpm || 5000))
+    }
+  }
+
+  if (jpm2Media && fs.existsSync(jpm2Media)) fs.unlinkSync(jpm2Media)
+  delete global.statusjpm2
+  await NXL.sendMessage(jpm2Chat, { text: `✅ JPM2 ${jpm2Jenis} selesai!\nTerkirim: *${jpm2Count}/${jpm2Filtered.length}* grup.` }, { quoted: m })
+}
+break
+
+case "jpmtesti": {
+  if (!isCreator) return m.reply(mess.owner)
+  if (global.statusjpm || global.statusjpm2) return m.reply('⚠️ JPM sedang berjalan! Tunggu selesai atau hentikan dengan .stopjpm2')
+  if (!text) return m.reply(`*Contoh:* ${command} caption testimoni (wajib kirim/reply foto)`)
+  if (!/image/.test(mime)) return m.reply('❌ Wajib menyertakan foto! Reply atau kirim foto dengan caption.')
+  if (!global.botReady) return m.reply('⏳ Bot baru reconnect, tunggu sebentar.')
+
+  global.statusjpm2 = true
+
+  const testiMedia = await NXL.downloadAndSaveMediaMessage(qmsg)
+
+  // Fetch langsung — TIDAK pakai cache
+  let testiGroups
+  try {
+    testiGroups = await Promise.race([
+      NXL.groupFetchAllParticipating(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000))
+    ])
+  } catch (e) {
+    delete global.statusjpm2
+    if (fs.existsSync(testiMedia)) fs.unlinkSync(testiMedia)
+    return m.reply(`❌ Gagal fetch grup: ${e.message}`)
+  }
+
+  const testiIds = Object.keys(testiGroups)
+
+  // Blacklist: gunakan blacklistjpm.json milik XresX
+  let testiBL = []
+  try { testiBL = loadBlacklistJpm() } catch { testiBL = [] }
+  const testiBLIds = testiBL.map(v => v.id)
+  const testiFiltered = testiIds.filter(id => !testiBLIds.includes(id))
+
+  const testiChat = m.chat
+  await m.reply(`⏳ JPM Testi ke *${testiFiltered.length}* grup...`)
+
+  let testiCount = 0
+  for (let i = 0; i < testiFiltered.length; i++) {
+    if (global.stopjpm2) { delete global.stopjpm2; break }
+    try {
+      await NXL.sendMessage(testiFiltered[i], {
+        image: fs.readFileSync(testiMedia),
+        caption: text,
+        contextInfo: { isForwarded: true, mentionedJid: [m.sender], businessMessageForwardInfo: { businessOwnerJid: botNumber } }
+      }, { quoted: FakeChannel })
+      testiCount++
+    } catch {}
+    if (i < testiFiltered.length - 1) {
+      await new Promise(r => setTimeout(r, global.JedaJpm || 5000))
+    }
+  }
+
+  if (fs.existsSync(testiMedia)) fs.unlinkSync(testiMedia)
+  delete global.statusjpm2
+  await NXL.sendMessage(testiChat, { text: `✅ JPM Testi selesai!\nTerkirim: *${testiCount}/${testiFiltered.length}* grup.` }, { quoted: m })
+}
+break
+
+case "stopjpm2": {
+  if (!isCreator) return m.reply(mess.owner)
+  if (!global.statusjpm2) return m.reply('❌ JPM2 tidak sedang berjalan.')
+  global.stopjpm2 = true
+  m.reply('⛔ Menghentikan JPM2/Testi...')
+}
+break
 
 // ═══ END FEATURE MERGE ═══
 

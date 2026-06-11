@@ -253,6 +253,20 @@ if (!NXL.public) {
 if (!m.key.fromMe && !isCreator) return
 }
 
+// ═══ GAME ANSWER HANDLER ═══
+if (!isCmd && m.isGroup && global._gameSessions?.[m.chat] && m.quoted) {
+  const _gSession = global._gameSessions[m.chat]
+  if (m.quoted.id === _gSession.messageId) {
+    const _userAns = (m.text || '').toLowerCase().trim()
+    const _correct = Array.isArray(_gSession.jawaban) ? _gSession.jawaban.some(j => _userAns.includes(j)) : _userAns === _gSession.jawaban
+    if (_correct) {
+      clearTimeout(_gSession.timeout)
+      delete global._gameSessions[m.chat]
+      await NXL.sendMessage(m.chat, { text: `✅ *Benar!* 🎉\n\nJawaban: *${Array.isArray(_gSession.jawaban)?_gSession.jawaban.join(' / '):_gSession.jawaban}*\n\nSelamat @${m.sender.split('@')[0]}!`, mentions: [m.sender] }, { quoted: m })
+    }
+  }
+}
+
 const getPPorangnya = async () => {
   const pp = await getPPUser()
   return await reSize(pp, 300, 300)
@@ -5048,6 +5062,228 @@ case "resetwarn": {
   }, { quoted: m })
 }
 break
+
+// ══════════════════════════════════════════════════════════════
+// ═══ FEATURE MERGE FROM ALIP AI ═══════════════════════════════
+// ══════════════════════════════════════════════════════════════
+
+case "tagadmin": {
+  if (!m.isGroup) return m.reply(mess.group)
+  if (!isCreator && !isAdmins) return m.reply(mess.admin)
+  if (!text) return m.reply(`*Contoh:* ${command} pesannya`)
+  let teksTag = text + "\n\n"
+  const adminListTag = groupAdmins.filter(e => e !== botNumber && e !== m.sender)
+  if (!adminListTag.length) return m.reply('⚠️ Tidak ada admin lain di grup ini.')
+  adminListTag.forEach(e => { teksTag += `@${e.split("@")[0]}\n` })
+  await NXL.sendMessage(m.chat, { text: teksTag, mentions: adminListTag }, { quoted: m })
+}
+break
+
+case "fitnah": case "fakereply": {
+  if (!isCreator) return m.reply(mess.owner)
+  if (!text) return m.reply(`*Contoh:* ${command} 6281xxx|pesan palsu|balasan`)
+  let fitnahParts = text.split('|')
+  if (fitnahParts.length < 3) return m.reply(`Format: nomor|pesan user|balasan bot`)
+  let fitnahTarget = ''
+  if (m.mentionedJid?.[0]) { fitnahTarget = m.mentionedJid[0] }
+  else { let n = fitnahParts[0].replace(/[^0-9]/g,''); if(!n.startsWith('62'))n='62'+n; fitnahTarget=n+'@s.whatsapp.net' }
+  if (!fitnahTarget) return m.reply('Target tidak valid')
+  let fitnahNama = fitnahTarget.split('@')[0]
+  await NXL.sendMessage(m.chat, { text: fitnahParts[fitnahParts.length-1], contextInfo: { quotedMessage: { conversation: fitnahParts[fitnahParts.length-2] }, stanzaId: 'FAKE_'+Date.now(), participant: fitnahTarget } })
+}
+break
+
+case "artinama": {
+  if (!text) return m.reply(`*Contoh:* ${command} nama`)
+  const artiList = ['Baik hati','Berjiwa pemimpin','Kreatif','Setia','Pemberani','Cerdas','Penyabar','Penuh semangat','Mulia','Berhati lembut','Pekerja keras','Beruntung']
+  let artiResult = `✨ *Arti Nama: ${text}*\n\n`
+  text.split('').forEach(l => { if(l.trim()) artiResult += `*${l.toUpperCase()}* — ${artiList[Math.floor(Math.random()*artiList.length)]}\n` })
+  m.reply(artiResult)
+}
+break
+
+case "cekbeban": case "cekbucin": case "cekfemboy": case "cekgay": case "cekjodoh": case "cekjones": case "cekkaya": case "cekkodam": case "cekmasadepan": case "ceksange": case "cekstress": case "cekwibu": {
+  const cekTarget = m.mentionedJid?.[0] ? `@${m.mentionedJid[0].split('@')[0]}` : m.quoted ? `@${m.quoted.sender.split('@')[0]}` : text || pushname
+  const cekPersen = Math.floor(Math.random()*101)
+  const cekLabels = {cekbeban:'Beban',cekbucin:'Bucin',cekfemboy:'Femboy',cekgay:'Gay',cekjodoh:'Jodoh',cekjones:'Jomblo Ngenes',cekkaya:'Kaya',cekkodam:'Kodam',cekmasadepan:'Masa Depan Cerah',ceksange:'Sange',cekstress:'Stress',cekwibu:'Wibu'}
+  m.reply(`🔍 *Cek ${cekLabels[command]||command}*\n\n👤 ${cekTarget}\n📊 Hasil: *${cekPersen}%*\n${'█'.repeat(Math.floor(cekPersen/10))}${'░'.repeat(10-Math.floor(cekPersen/10))}`)
+}
+break
+
+case "kecocokanpasangan": {
+  if (!text) return m.reply(`*Contoh:* ${command} nama1 & nama2`)
+  const cocokNames = text.split(/[&,]/).map(n=>n.trim()).filter(Boolean)
+  if (cocokNames.length<2) return m.reply(`*Contoh:* ${command} Andi & Siti`)
+  m.reply(`💕 *Kecocokan Pasangan*\n\n👤 ${cocokNames[0]} 💘 ${cocokNames[1]}\n📊 Kecocokan: *${Math.floor(Math.random()*101)}%*`)
+}
+break
+
+case "faktadunia": case "faktaunik": {
+  const faktaArr = ['Madu tidak pernah basi.','Sidik jari koala identik dengan manusia.','Otak manusia 20% oksigen tubuh.','Lumba-lumba tidur satu mata terbuka.','Jantung paus biru sebesar mobil.','DNA manusia 60% sama dengan pisang.','Rusia lebih luas dari Pluto.','Kecoak hidup tanpa kepala seminggu.','Bintang laut tidak punya otak.','Kucing tidur 70% hidupnya.','Petir 5x lebih panas dari matahari.','Bayi 300 tulang, dewasa 206.']
+  m.reply(`🌍 *${command === 'faktadunia' ? 'Fakta Dunia' : 'Fakta Unik'}*\n\n${faktaArr[Math.floor(Math.random()*faktaArr.length)]}`)
+}
+break
+
+case "infonegara": case "country": {
+  if (!text) return m.reply(`*Contoh:* ${command} indonesia`)
+  try { const r=await axios.get(`https://restcountries.com/v3.1/name/${encodeURIComponent(text)}`); const c=r.data[0]; m.reply(`🌐 *${c.name.common}*\n\n🏙️ Ibukota: ${c.capital?.[0]||'-'}\n👥 Populasi: ${c.population?.toLocaleString()}\n📏 Luas: ${c.area?.toLocaleString()} km²\n💰 Mata uang: ${Object.values(c.currencies||{})[0]?.name||'-'}\n🗣️ Bahasa: ${Object.values(c.languages||{}).join(', ')}`) } catch { m.reply('❌ Negara tidak ditemukan.') }
+}
+break
+
+case "jumlahuser": { m.reply(`👥 *Total User:* ${Object.keys(global.db?.users||{}).length}`) }
+break
+
+case "meme": {
+  try { const r=await axios.get('https://meme-api.com/gimme'); if(r.data?.url) await NXL.sendMessage(m.chat,{image:{url:r.data.url},caption:`😂 ${r.data.title||'Meme'}`},{quoted:m}); else m.reply('❌ Gagal') } catch { m.reply('❌ Gagal mengambil meme') }
+}
+break
+
+case "pakustad": {
+  const nasihat=['Ilmu tanpa amal ibarat pohon tanpa buah.','Sabar bukan tentang lama menunggu, tapi perilaku saat menunggu.','Doa tanpa usaha bohong, usaha tanpa doa sombong.','Jangan menunda kebaikan.','Orang paling kaya adalah yang paling sedikit kebutuhannya.','Ketika merasa sendiri, ingat Allah selalu bersama.','Jangan mengeluh, 80% orang tidak peduli.','Hidup ini singkat, jangan habiskan untuk dendam.']
+  m.reply(`🕌 *Nasihat*\n\n"${nasihat[Math.floor(Math.random()*nasihat.length)]}"`)
+}
+break
+
+case "planet": {
+  if (!text) return m.reply(`*Contoh:* ${command} mars`)
+  const planetData={merkurius:{d:'Terkecil, terdekat Matahari',s:'-180°C / 430°C'},venus:{d:'Terpanas di tata surya',s:'462°C'},bumi:{d:'Satu-satunya berisi kehidupan',s:'-89°C / 57°C'},mars:{d:'Planet merah',s:'-87°C / -5°C'},jupiter:{d:'Terbesar',s:'-108°C'},saturnus:{d:'Cincin paling terkenal',s:'-139°C'},uranus:{d:'Rotasi miring 98°',s:'-197°C'},neptunus:{d:'Terjauh dari Matahari',s:'-201°C'}}
+  const pl=planetData[text.toLowerCase()]; if(!pl) return m.reply(`Pilihan: ${Object.keys(planetData).join(', ')}`)
+  m.reply(`🪐 *${text}*\n📝 ${pl.d}\n🌡️ ${pl.s}`)
+}
+break
+
+case "quotesanime": {
+  const animeQ=[{c:'Naruto',q:'Jika tidak suka takdir, berjuanglah mengubahnya!'},{c:'Luffy',q:'Orang paling bebas di lautan adalah Raja Bajak Laut!'},{c:'Levi',q:'Pilih yang paling tidak akan kamu sesali.'},{c:'Itachi',q:'Yang penting aku tahu siapa diriku.'},{c:'Saitama',q:'Terus berusaha melampaui batasmu.'},{c:'Eren',q:'Jika tidak berjuang, tidak bisa menang!'}]
+  const aq=animeQ[Math.floor(Math.random()*animeQ.length)]
+  m.reply(`🎌 *Quotes Anime*\n\n"${aq.q}"\n— *${aq.c}*`)
+}
+break
+
+case "tafsirmimpi": {
+  if (!text) return m.reply(`*Contoh:* ${command} ular`)
+  const mimpiDB={ular:'Musuh mendekat',air:'Rezeki datang',terbang:'Keinginan tercapai',jatuh:'Perlu hati-hati',menikah:'Perubahan besar',hujan:'Rahmat',ikan:'Rezeki melimpah',kucing:'Ada yang iri',api:'Amarah perlu dikontrol',laut:'Perjalanan jauh',gunung:'Hambatan teratasi'}
+  const mk=Object.keys(mimpiDB).find(k=>text.toLowerCase().includes(k))
+  m.reply(`🌙 *Tafsir Mimpi: ${text}*\n\n🔮 ${mk?mimpiDB[mk]:'Ada hal baru akan terjadi. Tetap berdoa.'}`)
+}
+break
+
+case "waifu": {
+  try { const r=await axios.get('https://nekos.best/api/v2/waifu'); const u=r.data?.results?.[0]?.url; if(u) await NXL.sendMessage(m.chat,{image:{url:u},caption:'🎀 *Random Waifu*'},{quoted:m}); else m.reply('❌ Gagal') } catch { m.reply('❌ Gagal') }
+}
+break
+
+case "cekgempa": {
+  try { const r=await axios.get('https://data.bmkg.go.id/DataMKG/TEWS/autogempa.json'); const g=r.data?.Infogempa?.gempa; m.reply(`🌍 *Gempa Terkini*\n\n📅 ${g.Tanggal} ${g.Jam}\n📍 ${g.Wilayah}\n📏 M${g.Magnitude}\n📐 ${g.Kedalaman}\n⚠️ ${g.Potensi||'-'}`) } catch { m.reply('❌ Gagal ambil data BMKG') }
+}
+break
+
+case "cekcuaca": {
+  if (!text) return m.reply(`*Contoh:* ${command} Jakarta`)
+  try { const r=await axios.get(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(text)}&appid=060a6bcfa19809c2cd4d97a212b19273&units=metric&lang=id`); const w=r.data; m.reply(`🌤️ *Cuaca ${w.name}*\n\n🌡️ ${w.main.temp}°C\n💧 ${w.main.humidity}%\n🌬️ ${w.wind.speed} m/s\n☁️ ${w.weather[0].description}`) } catch { m.reply('❌ Kota tidak ditemukan') }
+}
+break
+
+case "cekkalender": {
+  const now=new Date(); m.reply(`📅 *Hari Ini*\n\n${now.toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric',timeZone:'Asia/Jakarta'})}\n⏰ ${now.toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta'})} WIB`)
+}
+break
+
+case "igstalk": case "instagramstalk": {
+  if (!text) return m.reply(`*Contoh:* ${command} username`)
+  try { const r=await axios.get(`https://api.siputzx.my.id/api/stalk/ig?username=${encodeURIComponent(text.replace('@',''))}`); const d=r.data?.data||r.data; m.reply(`📸 *IG: ${d?.username||text}*\n\n👤 ${d?.fullName||d?.full_name||'-'}\n📝 ${d?.biography||d?.bio||'-'}\n👥 ${(d?.followers||0).toLocaleString()} followers\n📷 ${d?.posts||0} posts`) } catch { m.reply('❌ Gagal stalk IG') }
+}
+break
+
+case "tiktokstalk": {
+  if (!text) return m.reply(`*Contoh:* ${command} username`)
+  try { const r=await axios.get(`https://api.siputzx.my.id/api/stalk/tiktok?username=${encodeURIComponent(text.replace('@',''))}`); const d=r.data?.data||r.data; m.reply(`🎵 *TikTok: @${d?.username||text}*\n\n👤 ${d?.nickname||'-'}\n👥 ${(d?.followers||d?.followerCount||0).toLocaleString()} followers\n❤️ ${(d?.likes||d?.heartCount||0).toLocaleString()} likes`) } catch { m.reply('❌ Gagal stalk TikTok') }
+}
+break
+
+case "stalkroblox": {
+  if (!text) return m.reply(`*Contoh:* ${command} username`)
+  try { const s=await axios.post('https://users.roblox.com/v1/usernames/users',{usernames:[text]}); const u=s.data?.data?.[0]; if(!u)return m.reply('❌ Tidak ditemukan'); const p=await axios.get(`https://users.roblox.com/v1/users/${u.id}`); const d=p.data; m.reply(`🎮 *Roblox: ${d.displayName}*\n\n🔗 @${d.name}\n🆔 ${d.id}\n📝 ${d.description||'-'}\n${d.isBanned?'⛔ BANNED':'✅ Aktif'}`) } catch { m.reply('❌ Gagal') }
+}
+break
+
+case "npmjs": {
+  if (!text) return m.reply(`*Contoh:* ${command} axios`)
+  try { const r=await axios.get(`https://registry.npmjs.org/${encodeURIComponent(text)}`); const d=r.data; m.reply(`📦 *${d.name}* v${d['dist-tags']?.latest}\n\n📝 ${d.description||'-'}\n👤 ${d.author?.name||'-'}\n📜 ${d.license||'-'}\n📥 npm i ${d.name}`) } catch { m.reply('❌ Package tidak ditemukan') }
+}
+break
+
+case "yts": {
+  if (!text) return m.reply(`*Contoh:* ${command} lagu`)
+  try { const r=await yts(text); const v=r.videos.slice(0,5); if(!v.length)return m.reply('❌ Tidak ditemukan'); let t=`🔍 *YT Search: ${text}*\n\n`; v.forEach((x,i)=>{t+=`${i+1}. *${x.title}*\n   ⏱️ ${x.timestamp} | 👁️ ${x.views?.toLocaleString()||'?'}\n   ${x.url}\n\n`}); m.reply(t) } catch { m.reply('❌ Gagal search YouTube') }
+}
+break
+
+case "spotify": {
+  if (!text) return m.reply(`*Contoh:* ${command} lagu`)
+  try { const r=await axios.get(`https://api.siputzx.my.id/api/s/spotify?query=${encodeURIComponent(text)}`); const t=r.data?.data?.slice(0,5)||[]; if(!t.length)return m.reply('❌ Tidak ditemukan'); let txt=`🎵 *Spotify: ${text}*\n\n`; t.forEach((x,i)=>{txt+=`${i+1}. *${x.title||x.name}*\n   🎤 ${x.artist||'-'}\n   ${x.url||'-'}\n\n`}); m.reply(txt) } catch { m.reply('❌ Gagal search Spotify') }
+}
+break
+
+case "twitter": case "xdl": {
+  if (!text) return m.reply(`*Contoh:* ${command} https://x.com/...`)
+  if (!text.includes('x.com')&&!text.includes('twitter.com')) return m.reply('❌ Link harus dari x.com')
+  try { const FormData=require('form-data'); let f=new FormData(); f.append('q',text); f.append('lang','en'); const {data}=await axios.post('https://savetwitter.net/api/ajaxSearch',f,{headers:f.getHeaders(),timeout:15000}); const $=cheerio.load(data?.data||''); const u=$('a[href]').first().attr('href'); if(u) await NXL.sendMessage(m.chat,{video:{url:u},caption:'🐦 *Twitter/X*'},{quoted:m}); else m.reply('❌ Video tidak ditemukan') } catch { m.reply('❌ Gagal download Twitter') }
+}
+break
+
+case "threads": case "threadsdl": {
+  if (!text||!text.includes('threads.net')) return m.reply(`*Contoh:* ${command} https://threads.net/...`)
+  try { const r=await axios.get(`https://api.siputzx.my.id/api/d/threads?url=${encodeURIComponent(text)}`); const d=r.data?.data||r.data; if(d?.video) await NXL.sendMessage(m.chat,{video:{url:d.video},caption:d.caption||''},{quoted:m}); else if(d?.image) await NXL.sendMessage(m.chat,{image:{url:d.image},caption:d.caption||''},{quoted:m}); else m.reply('❌ Media tidak ditemukan') } catch { m.reply('❌ Gagal download Threads') }
+}
+break
+
+case "gdrive": {
+  if (!text||!text.includes('drive.google.com')) return m.reply(`*Contoh:* ${command} https://drive.google.com/...`)
+  const gid=text.match(/\/d\/(.+?)(?:\/|$)/)?.[1]||text.match(/id=(.+?)(?:&|$)/)?.[1]
+  if (!gid) return m.reply('❌ ID file tidak ditemukan')
+  m.reply(`📥 *Google Drive*\n\n🔗 Direct: https://drive.google.com/uc?export=download&id=${gid}`)
+}
+break
+
+case "gitclone": {
+  if (!text||!text.includes('github.com')) return m.reply(`*Contoh:* ${command} https://github.com/user/repo`)
+  try { const mt=text.match(/github\.com\/([^\/]+)\/([^\/\s]+)/); if(!mt) return m.reply('❌ URL tidak valid'); await NXL.sendMessage(m.chat,{document:{url:`https://github.com/${mt[1]}/${mt[2].replace('.git','')}/archive/refs/heads/main.zip`},mimetype:'application/zip',fileName:`${mt[2].replace('.git','')}.zip`},{quoted:m}) } catch { m.reply('❌ Gagal clone. Pastikan repo public.') }
+}
+break
+
+case "playv2": {
+  if (!text) return m.reply(`*Contoh:* ${command} judul lagu`)
+  try { await m.reply(`🔍 Mencari: *${text}*...`); const r=await yts(text); const v=r.videos[0]; if(!v) return m.reply('❌ Tidak ditemukan'); const dl=await ytdl.download(v.url,{type:'audio'}); if(!dl?.data?.url) return m.reply('❌ Gagal download'); await NXL.sendMessage(m.chat,{audio:{url:dl.data.url},mimetype:'audio/mpeg',ptt:false},{quoted:m}) } catch(e) { m.reply('❌ Gagal: '+e.message) }
+}
+break
+
+// ═══ GAME MENU ═══
+
+case "caklontong": case "tebakhero": case "family100": case "tebakgambar": case "tebaklogo": case "tebakgame": case "tebakmakanan": case "lengkapikalimat": case "tebakbendera": case "siapakahaku": case "tebaklagu": case "sambungkata": case "tebakgenshin": case "tebakhewan": case "tebakinggris": case "tebakkalimat": case "tebakanime": case "tebakkata": case "susunkata": case "tebakjorok": case "tebaklirik": case "asahotak": case "tebakjkt": {
+  if (!m.isGroup) return m.reply(mess.group)
+  if (global._gameSessions?.[m.chat]) return m.reply('⚠️ Game aktif! Ketik *.nyerah* untuk menyerah.')
+  const _gFiles={caklontong:'./game/caklontong.json',family100:'./game/family100.json',tebakgambar:'./game/tebakgambar.json',tebaklogo:'./game/tebaklogo.json',tebakhero:'./game/tebakhero.json',tebakgenshin:'./game/tebakgenshin.json',tebakgame:'./game/tebakgame.json',tebakmakanan:'./game/tebakmakanan.json',tebakbendera:'./game/tebakbendera.json',tebaklagu:'./game/tebaklagu.json',sambungkata:'./game/sambungkata.json',tebaklirik:'./game/tebaklirik.json',asahotak:'./game/asahotak.json',lengkapikalimat:'./game/lengkapikalimat.json',siapakahaku:'./game/siapakahaku.json',susunkata:'./game/susunkata.json',tebakkata:'./game/tebakkata.json',tebakanime:'./game/tebakanime.json',tebakkalimat:'./game/tebakkalimat.json',tebakjorok:'./game/tebakjorok.json',tebakinggris:'./game/tebakinggris.json',tebakhewan:'./game/tebakhewan.json',tebakjkt:'./game/tebakjkt.json'}
+  const _gf=_gFiles[command]; if(!_gf||!fs.existsSync(_gf)) return m.reply('❌ Data game tidak tersedia.')
+  try { const _gd=JSON.parse(fs.readFileSync(_gf,'utf-8')); if(!Array.isArray(_gd)||!_gd.length) return m.reply('❌ Data kosong.'); const _s=_gd[Math.floor(Math.random()*_gd.length)]; const _q=_s.soal||_s.deskripsi||'Tebak!'; const _ra=_s.jawaban||_s.name||_s.judul; if(!_ra) return m.reply('❌ Soal error.'); const _j=Array.isArray(_ra)?_ra.map(j=>String(j).toLowerCase()):[String(_ra).toLowerCase()]; const _cap=`🎮 *${command.toUpperCase()}*\n\n${_q}\n\n⏳ 60 detik!\n📌 Reply pesan ini!\nKetik *.nyerah* untuk menyerah.`; let _sm; if(_s.gambar||_s.img){_sm=await NXL.sendMessage(m.chat,{image:{url:_s.gambar||_s.img},caption:_cap},{quoted:m})}else{_sm=await NXL.sendMessage(m.chat,{text:_cap},{quoted:m})}; if(!global._gameSessions) global._gameSessions={}; global._gameSessions[m.chat]={jawaban:_j,messageId:_sm.key.id,timeout:setTimeout(()=>{if(global._gameSessions?.[m.chat]){NXL.sendMessage(m.chat,{text:`⏰ Waktu habis! Jawaban: *${_j.join(' / ')}*`});delete global._gameSessions[m.chat]}},60000)} } catch(e) { m.reply('❌ Error: '+e.message) }
+}
+break
+
+case "nyerah": {
+  if (!global._gameSessions?.[m.chat]) return m.reply('❌ Tidak ada game aktif.')
+  const _gs=global._gameSessions[m.chat]; clearTimeout(_gs.timeout); delete global._gameSessions[m.chat]
+  m.reply(`🏳️ Menyerah! Jawaban: *${Array.isArray(_gs.jawaban)?_gs.jawaban.join(' / '):_gs.jawaban}*`)
+}
+break
+
+// ═══ NSFW (nekos.best API — active) ═══
+
+case "nsfw": case "nsfwass": case "nsfwloli": case "nsfwgay": case "nsfwahegao": case "nsfwbdsm": case "nsfwgangbang": case "nsfwpussy": case "nsfwzettai": case "nsfwneko": {
+  if (!isCreator) return m.reply('⛔ Owner only!')
+  try { const r=await axios.get('https://nekos.best/api/v2/neko'); const u=r.data?.results?.[0]?.url; if(u) await NXL.sendMessage(m.chat,{image:{url:u},caption:`🔞 *${command.toUpperCase()}*`},{quoted:m}); else m.reply('❌ Gagal') } catch { m.reply('❌ API tidak tersedia') }
+}
+break
+
+// ═══ END FEATURE MERGE ═══
 
 case "teslink":
   await NXL.sendMessage(m.chat, { 

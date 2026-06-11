@@ -1910,10 +1910,11 @@ case "jasher": case "jpm": case "jaser": {
   const jenis = mediaPath ? "teks & foto" : "teks"
   const jedaDetik = ((global.JedaJpm || 5000) / 1000).toFixed(1)
 
-  // Update progress: mulai kirim
-  await NXL.sendMessage(m.chat, { text: `⏳ JPM\n📦 Data grup siap\n🔍 Blacklist diperiksa${skipped > 0 ? ` (${skipped} di-skip)` : ''}\n🚀 Mulai kirim ${jenis}!\n📨 Target: *${filteredGroupIds.length}* grup\n⏱️ Jeda: *${jedaDetik}* detik`, edit: _progressKey })
+  // Update progress: persiapan selesai, siap kirim
+  await NXL.sendMessage(m.chat, { text: `⏳ JPM\n📦 Data grup siap\n🔍 Blacklist diperiksa${skipped > 0 ? ` (${skipped} di-skip)` : ''}\n📨 Target: *${filteredGroupIds.length}* grup\n⏱️ Jeda: *${jedaDetik}* detik\n\n⏳ Mengirim ke grup pertama...`, edit: _progressKey })
 
   let successCount = 0
+  let _firstSent = false
 
   for (let i = 0; i < filteredGroupIds.length; i++) {
     const groupId = filteredGroupIds[i]
@@ -1924,6 +1925,11 @@ case "jasher": case "jpm": case "jaser": {
     try {
       await NXL.sendMessage(groupId, global.messageJpm, { quoted: FakeChannel })
       successCount++
+      // Update progress HANYA setelah grup pertama berhasil terkirim
+      if (!_firstSent) {
+        _firstSent = true
+        await NXL.sendMessage(m.chat, { text: `✅ JPM ${jenis} berjalan!\n🚀 Grup pertama terkirim\n📨 Target: *${filteredGroupIds.length}* grup\n⏱️ Jeda: *${jedaDetik}* detik`, edit: _progressKey })
+      }
     } catch (err) {
       console.error(`Gagal kirim ke grup ${groupId}:`, err)
     }

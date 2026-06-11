@@ -1002,7 +1002,6 @@ case "gpt": {
     model: "openai/gpt-oss-20b",
     messages: [{ role: 'user', content: text }]
   }, { headers: { Authorization: `Bearer ${apikey}` } })
-  const promt = "kamu adalah ai XresXDigital"
   const output = web.data.choices[0].message.content || "data tidak ditemukan"
   reply(`${output}`)
 }
@@ -1931,7 +1930,24 @@ case "jasher": case "jpm": case "jaser": {
         await NXL.sendMessage(m.chat, { text: `✅ JPM ${jenis} berjalan!\n🚀 Grup pertama terkirim\n📨 Target: *${filteredGroupIds.length}* grup\n⏱️ Jeda: *${jedaDetik}* detik`, edit: _progressKey })
       }
     } catch (err) {
-      console.error(`Gagal kirim ke grup ${groupId}:`, err)
+      // Retry 1x untuk error network/timeout (bukan permission error)
+      const errCode = err?.output?.statusCode || err?.statusCode || 0
+      const isNetworkError = errCode === 408 || errCode === 503 || /timed?.out|ECONNRESET|ENOTFOUND|socket|closed/i.test(String(err?.message || ''))
+      if (isNetworkError) {
+        await new Promise(r => setTimeout(r, 3000))
+        try {
+          await NXL.sendMessage(groupId, global.messageJpm, { quoted: FakeChannel })
+          successCount++
+          if (!_firstSent) {
+            _firstSent = true
+            await NXL.sendMessage(m.chat, { text: `✅ JPM ${jenis} berjalan!\n🚀 Grup pertama terkirim\n📨 Target: *${filteredGroupIds.length}* grup\n⏱️ Jeda: *${jedaDetik}* detik`, edit: _progressKey })
+          }
+        } catch {
+          console.error(`[JPM] Retry gagal ke ${groupId}`)
+        }
+      } else {
+        console.error(`Gagal kirim ke grup ${groupId}:`, err?.message || err)
+      }
     }
     if (i < filteredGroupIds.length - 1) {
       await new Promise(r => setTimeout(r, global.JedaJpm || 5000))
@@ -4191,12 +4207,7 @@ case 'autojpm': {
 }
 break
 
-case 'stopjpm': {
-  if (!isCreator) return reply(mess.owner)
-  global.stopjpm = true
-  m.reply("⛔ Menghentikan autojpm...")
-}
-break
+// [REMOVED] duplicate case 'stopjpm' — sudah ada di baris 2495
 
 case 'jpmswgc': {
   if (!isCreator) return reply(mess.owner)

@@ -85,7 +85,6 @@ global.limitawal       = 10              // limit command awal untuk user baru
 
 
 // ── DELAY & TIMER ─────────────────────────────────────────────
-global.delayjpm        = 5500
 global.JedaSwgc        = 5000
 global.JedaPushkontak  = 5000
 global.JedaJpm         = 4000

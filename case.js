@@ -1241,45 +1241,131 @@ case "allmenu": {
   ┆• .brat
   ┆• .sfile
   ┆• .play
+  ┆• .playv2
+  ╰◙
+  ╭◙  *Search Menu*
+  ┆• .yts
+  ┆• .spotify
+  ┆• .npmjs
+  ┆• .igstalk
+  ┆• .tiktokstalk
+  ┆• .stalkroblox
+  ┆• .cekgempa
+  ┆• .cekcuaca
+  ┆• .cekkalender
+  ┆• .infonegara
+  ╰◙
+  ╭◙  *Download Menu*
+  ┆• .twitter
+  ┆• .threads
+  ┆• .gdrive
+  ┆• .gitclone
+  ╰◙
+  ╭◙  *Fun Menu*
+  ┆• .artinama
+  ┆• .fitnah
+  ┆• .cekbeban
+  ┆• .cekbucin
+  ┆• .cekgay
+  ┆• .cekjodoh
+  ┆• .cekjones
+  ┆• .cekkaya
+  ┆• .cekkodam
+  ┆• .cekmasadepan
+  ┆• .ceksange
+  ┆• .cekstress
+  ┆• .cekwibu
+  ┆• .kecocokanpasangan
+  ┆• .faktadunia
+  ┆• .faktaunik
+  ┆• .meme
+  ┆• .waifu
+  ┆• .quotesanime
+  ┆• .pakustad
+  ┆• .planet
+  ┆• .tafsirmimpi
+  ┆• .jumlahuser
+  ╰◙
+  ╭◙  *Game Menu*
+  ┆• .asahotak
+  ┆• .caklontong
+  ┆• .family100
+  ┆• .tebakgambar
+  ┆• .tebakhero
+  ┆• .tebakgenshin
+  ┆• .tebakkata
+  ┆• .tebaklirik
+  ┆• .tebakbendera
+  ┆• .tebakmakanan
+  ┆• .tebaklogo
+  ┆• .tebakgame
+  ┆• .sambungkata
+  ┆• .susunkata
+  ┆• .siapakahaku
+  ┆• .nyerah
   ╰◙
   ╭◙  *Tools Media*
   ┆• .tourl
   ╰◙
   ╭◙ 𝗔𝘂𝘁𝗼 𝗠𝗲𝗻𝘂
-  ┆•.autojpmswgc
-  ┆•.setautoswgc
+  ┆• .autojpmswgc
+  ┆• .setautoswgc
   ┆• .autojpm
-  ┆•.setjpm
+  ┆• .setjpm
   ┆• .autojoingc
   ╰◙
   ╭◙ 𝗝𝗣𝗠 𝗠𝗲𝗻𝘂
-  ┆•.jaser
+  ┆• .jpm
+  ┆• .jpm2
+  ┆• .jpmtesti
+  ┆• .jpmht
+  ┆• .jpmch
   ┆• .jaserht
-  ┆•.jedajaser
   ┆• .jpmswgc
+  ┆• .stopjpm
+  ┆• .stopjpm2
+  ┆• .jedajpm
+  ┆• .bljpm
+  ┆• .listbljpm
+  ┆• .delbljpm
+  ╰◙
+  ╭◙  *Toko Menu*
   ┆• .listproduk
   ┆• .addproduk
+  ┆• .delproduk
   ┆• .autopromo
   ┆• .setpromo
   ┆• .payment
+  ┆• .qris
+  ┆• .done
+  ┆• .proses
   ╰◙
   ╭◙  *Group Menu*
+  ┆• .tagadmin
   ┆• .creategc
   ┆• .leavegc
   ┆• .joingc
   ┆• .listgrup
   ┆• .notifgrup
-  ┆• .status grup
+  ┆• .statusgrup
   ┆• .antilink
+  ┆• .antilink2
   ┆• .welcome
   ┆• .hidetag
   ┆• .kick
   ┆• .add
+  ┆• .open
+  ┆• .close
+  ┆• .mute
+  ┆• .unmute
+  ┆• .warn
+  ┆• .resetwarn
   ╰◙
   ╭◙  *Owner Menu*
-  ┆• .addowner <nomor>
-  ┆• .delowner <nomor>
+  ┆• .addowner
+  ┆• .delowner
   ┆• .listowner
+  ┆• .pushkontak
   ┆• .restart
   ┆• .public
   ┆• .self

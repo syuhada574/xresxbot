@@ -1866,6 +1866,9 @@ case "jasher": case "jpm": case "jaser": {
   if (!text) return m.reply(`*Contoh :* ${command} pesannya & bisa dengan foto juga`)
   if (!global.botReady) return m.reply(`⏳ Bot baru saja reconnect, harap tunggu 20 detik lalu coba lagi.`)
 
+  // Progress message — satu pesan yang diedit berkali-kali
+  let { key: _progressKey } = await NXL.sendMessage(m.chat, { text: `⏳ JPM\n📦 Mengambil data grup...` })
+
   let mediaPath
   if (/image/.test(mime)) {
     mediaPath = await NXL.downloadAndSaveMediaMessage(qmsg)
@@ -1875,9 +1878,13 @@ case "jasher": case "jpm": case "jaser": {
   try {
     allGroups = await global.getGroupsCached()
   } catch (e) {
-    return m.reply(`❌ Gagal mengambil daftar grup: ${e.message}\nBot mungkin belum siap, tunggu sebentar lalu coba lagi.`)
+    await NXL.sendMessage(m.chat, { text: `❌ Gagal mengambil daftar grup: ${e.message}\nBot mungkin belum siap, tunggu sebentar lalu coba lagi.`, edit: _progressKey })
+    return
   }
   const groupIds = Object.keys(allGroups)
+
+  // Update progress: data grup siap
+  await NXL.sendMessage(m.chat, { text: `⏳ JPM\n📦 Data grup siap (${groupIds.length} grup)\n🔍 Memeriksa blacklist JPM...`, edit: _progressKey })
 
   // Baca blacklist
   let blacklist = []
@@ -1901,7 +1908,10 @@ case "jasher": case "jpm": case "jaser": {
 
   const senderChat = m.chat
   const jenis = mediaPath ? "teks & foto" : "teks"
-  await m.reply(`⏳ Memproses JPM ${jenis} ke *${filteredGroupIds.length}* grup...\n${skipped > 0 ? `⛔ *${skipped}* grup di-skip (blacklist)` : ''}`)
+  const jedaDetik = ((global.JedaJpm || 5000) / 1000).toFixed(1)
+
+  // Update progress: mulai kirim
+  await NXL.sendMessage(m.chat, { text: `⏳ JPM\n📦 Data grup siap\n🔍 Blacklist diperiksa${skipped > 0 ? ` (${skipped} di-skip)` : ''}\n🚀 Mulai kirim ${jenis}!\n📨 Target: *${filteredGroupIds.length}* grup\n⏱️ Jeda: *${jedaDetik}* detik`, edit: _progressKey })
 
   let successCount = 0
 

@@ -5275,13 +5275,7 @@ case "nyerah": {
 }
 break
 
-// ═══ NSFW (nekos.best API — active) ═══
 
-case "nsfw": case "nsfwass": case "nsfwloli": case "nsfwgay": case "nsfwahegao": case "nsfwbdsm": case "nsfwgangbang": case "nsfwpussy": case "nsfwzettai": case "nsfwneko": {
-  if (!isCreator) return m.reply('⛔ Owner only!')
-  try { const r=await axios.get('https://nekos.best/api/v2/neko'); const u=r.data?.results?.[0]?.url; if(u) await NXL.sendMessage(m.chat,{image:{url:u},caption:`🔞 *${command.toUpperCase()}*`},{quoted:m}); else m.reply('❌ Gagal') } catch { m.reply('❌ API tidak tersedia') }
-}
-break
 
 // ═══ END FEATURE MERGE ═══
 

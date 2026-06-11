@@ -3208,7 +3208,7 @@ case 'caratt': {
       return m.reply('❌ Video tidak ditemukan untuk: ' + text)
     }
 
-    const results = items.slice(0, 3)
+    const results = items.sort((a, b) => (b.play_count || 0) - (a.play_count || 0)).slice(0, 3)
 
     await m.reply(`✅ Ditemukan ${items.length} video, mengunduh ${results.length} teratas...`)
 

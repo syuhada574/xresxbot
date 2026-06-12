@@ -1114,7 +1114,6 @@ let listMessage = { title: 'List Menu', sections }
   ┆• .emojimix
   ┆• .pinterest
   ┆• .ttsearch
-  ┆• .gimage
   ┆• .bratvid
   ┆• .ssweb
   ┆• .ffstalk
@@ -1233,7 +1232,6 @@ case "allmenu": {
   ┆• .emojimix
   ┆• .pinterest
   ┆• .ttsearch
-  ┆• .gimage
   ┆• .bratvid
   ┆• .ssweb
   ┆• .ffstalk
@@ -1241,11 +1239,9 @@ case "allmenu": {
   ┆• .brat
   ┆• .sfile
   ┆• .play
-  ┆• .playv2
   ╰◙
   ╭◙  *Search Menu*
   ┆• .yts
-  ┆• .spotify
   ┆• .npmjs
   ┆• .igstalk
   ┆• .tiktokstalk
@@ -1253,7 +1249,6 @@ case "allmenu": {
   ┆• .cekgempa
   ┆• .cekcuaca
   ┆• .cekkalender
-  ┆• .infonegara
   ╰◙
   ╭◙  *Download Menu*
   ┆• .twitter
@@ -1323,7 +1318,6 @@ case "allmenu": {
   ┆• .jaserht
   ┆• .jpmswgc
   ┆• .stopjpm
-  ┆• .stopjpm2
   ┆• .jedajpm
   ┆• .bljpm
   ┆• .listbljpm
@@ -1568,7 +1562,7 @@ case "ps": {
   const teks = `${status}
 
 📦 Pembelian: ${text}
-🗓️ Tanggal: ${global.tanggal(Date.now())}
+🗓️ Tanggal: ${tanggal(Date.now())}
 
 📢 Cek Testimoni Pembeli:
 ${global.linkChannel.split("https://")[1] || "-"}
@@ -1962,7 +1956,6 @@ break
 case "jasher": case "jpm": case "jaser": {
   if (!isCreator) return m.reply(mess.owner)
   if (global.statusjpm) return m.reply(`⚠️ JPM sedang berjalan, tunggu sampai selesai atau hentikan dengan .stopjpm`)
-  if (global.statusjpm2) return m.reply(`⚠️ JPM2 sedang berjalan, tunggu sampai selesai atau hentikan dengan .stopjpm2`)
   if (!text) return m.reply(`*Contoh :* ${command} pesannya & bisa dengan foto juga`)
   if (!global.botReady) return m.reply(`⏳ Bot baru saja reconnect, harap tunggu 20 detik lalu coba lagi.`)
 
@@ -3219,29 +3212,7 @@ case "pin":
 
         break;
 
-case "gimage": {
-  if (!text) return m.reply(`『 🎨 Gemini Image 』\n\n◇ Contoh: .gimage anime girl with sword`)
-
-  await m.reply(`『 🎨 』 Generating gambar *${text}*...`)
-
-  try {
-    const prompt = encodeURIComponent(text)
-    const seed = Math.floor(Math.random() * 99999)
-    const url = `https://image.pollinations.ai/prompt/${prompt}?seed=${seed}&width=1024&height=1024&nologo=true&enhance=true`
-
-    const imageRes = await fetch(url)
-    const buffer = Buffer.from(await imageRes.arrayBuffer())
-
-    await NXL.sendMessage(m.chat, {
-      image: buffer,
-      caption: `『 🎨 *AI Image Generator* 』\n「 ${text} 」\n◆━━━━━━━━━━━━━━━━◆\n🌸 *${storename}* 🌸`
-    }, { quoted: m })
-
-  } catch (e) {
-    m.reply(`❌ Gagal generate gambar.\n${e.message}`)
-  }
-}
-break
+// [REMOVED] case "gimage" — pollinations.ai sekarang berbayar (402)
 
 case 'play':
 case 'song': {
@@ -5354,11 +5325,7 @@ case "faktadunia": case "faktaunik": {
 }
 break
 
-case "infonegara": case "country": {
-  if (!text) return m.reply(`*Contoh:* ${command} indonesia`)
-  try { const r=await axios.get(`https://restcountries.com/v3.1/name/${encodeURIComponent(text)}`); const c=r.data[0]; m.reply(`🌐 *${c.name.common}*\n\n🏙️ Ibukota: ${c.capital?.[0]||'-'}\n👥 Populasi: ${c.population?.toLocaleString()}\n📏 Luas: ${c.area?.toLocaleString()} km²\n💰 Mata uang: ${Object.values(c.currencies||{})[0]?.name||'-'}\n🗣️ Bahasa: ${Object.values(c.languages||{}).join(', ')}`) } catch { m.reply('❌ Negara tidak ditemukan.') }
-}
-break
+// [REMOVED] case "infonegara" — restcountries.com API deprecated
 
 case "jumlahuser": { m.reply(`👥 *Total User:* ${Object.keys(global.db?.users||{}).length}`) }
 break
@@ -5448,12 +5415,6 @@ case "yts": {
 }
 break
 
-case "spotify": {
-  if (!text) return m.reply(`*Contoh:* ${command} lagu`)
-  try { const r=await axios.get(`https://api.siputzx.my.id/api/s/spotify?query=${encodeURIComponent(text)}`); const t=r.data?.data?.slice(0,5)||[]; if(!t.length)return m.reply('❌ Tidak ditemukan'); let txt=`🎵 *Spotify: ${text}*\n\n`; t.forEach((x,i)=>{txt+=`${i+1}. *${x.title||x.name}*\n   🎤 ${x.artist||'-'}\n   ${x.url||'-'}\n\n`}); m.reply(txt) } catch { m.reply('❌ Gagal search Spotify') }
-}
-break
-
 case "twitter": case "xdl": {
   if (!text) return m.reply(`*Contoh:* ${command} https://x.com/...`)
   if (!text.includes('x.com')&&!text.includes('twitter.com')) return m.reply('❌ Link harus dari x.com')
@@ -5481,12 +5442,6 @@ case "gitclone": {
 }
 break
 
-case "playv2": {
-  if (!text) return m.reply(`*Contoh:* ${command} judul lagu`)
-  try { await m.reply(`🔍 Mencari: *${text}*...`); const r=await yts(text); const v=r.videos[0]; if(!v) return m.reply('❌ Tidak ditemukan'); const dl=await ytdl.download(v.url,{type:'audio'}); if(!dl?.data?.url) return m.reply('❌ Gagal download'); await NXL.sendMessage(m.chat,{audio:{url:dl.data.url},mimetype:'audio/mpeg',ptt:false},{quoted:m}) } catch(e) { m.reply('❌ Gagal: '+e.message) }
-}
-break
-
 // ═══ GAME MENU ═══
 
 case "caklontong": case "tebakhero": case "family100": case "tebakgambar": case "tebaklogo": case "tebakgame": case "tebakmakanan": case "lengkapikalimat": case "tebakbendera": case "siapakahaku": case "tebaklagu": case "sambungkata": case "tebakgenshin": case "tebakhewan": case "tebakinggris": case "tebakkalimat": case "tebakanime": case "tebakkata": case "susunkata": case "tebakjorok": case "tebaklirik": case "asahotak": case "tebakjkt": {
@@ -5509,7 +5464,7 @@ break
 
 case "jpm2": {
   if (!isCreator) return m.reply(mess.owner)
-  if (global.statusjpm || global.statusjpm2) return m.reply('⚠️ JPM sedang berjalan! Tunggu selesai atau hentikan dengan .stopjpm2')
+  if (global.statusjpm) return m.reply('⚠️ JPM sedang berjalan! Tunggu selesai atau hentikan dengan .stopjpm')
   if (!text) return m.reply(`*Contoh:* ${command} pesannya & bisa dengan foto juga`)
   if (!global.botReady) return m.reply('⏳ Bot baru reconnect, tunggu sebentar.')
 
@@ -5518,7 +5473,7 @@ case "jpm2": {
     jpm2Media = await NXL.downloadAndSaveMediaMessage(qmsg)
   }
 
-  global.statusjpm2 = true
+  global.statusjpm = true
 
   // Fetch langsung — TIDAK pakai cache
   let jpm2Groups
@@ -5528,7 +5483,7 @@ case "jpm2": {
       new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000))
     ])
   } catch (e) {
-    delete global.statusjpm2
+    delete global.statusjpm
     if (jpm2Media && fs.existsSync(jpm2Media)) fs.unlinkSync(jpm2Media)
     return m.reply(`❌ Gagal fetch grup: ${e.message}`)
   }
@@ -5552,7 +5507,7 @@ case "jpm2": {
 
   let jpm2Count = 0
   for (let i = 0; i < jpm2Filtered.length; i++) {
-    if (global.stopjpm2) { delete global.stopjpm2; break }
+    if (global.stopjpm) { delete global.stopjpm; break }
     try {
       await NXL.sendMessage(jpm2Filtered[i], jpm2Content, { quoted: FakeChannel })
       jpm2Count++
@@ -5563,19 +5518,19 @@ case "jpm2": {
   }
 
   if (jpm2Media && fs.existsSync(jpm2Media)) fs.unlinkSync(jpm2Media)
-  delete global.statusjpm2
+  delete global.statusjpm
   await NXL.sendMessage(jpm2Chat, { text: `✅ JPM2 ${jpm2Jenis} selesai!\nTerkirim: *${jpm2Count}/${jpm2Filtered.length}* grup.` }, { quoted: m })
 }
 break
 
 case "jpmtesti": {
   if (!isCreator) return m.reply(mess.owner)
-  if (global.statusjpm || global.statusjpm2) return m.reply('⚠️ JPM sedang berjalan! Tunggu selesai atau hentikan dengan .stopjpm2')
+  if (global.statusjpm) return m.reply('⚠️ JPM sedang berjalan! Tunggu selesai atau hentikan dengan .stopjpm')
   if (!text) return m.reply(`*Contoh:* ${command} caption testimoni (wajib kirim/reply foto)`)
   if (!/image/.test(mime)) return m.reply('❌ Wajib menyertakan foto! Reply atau kirim foto dengan caption.')
   if (!global.botReady) return m.reply('⏳ Bot baru reconnect, tunggu sebentar.')
 
-  global.statusjpm2 = true
+  global.statusjpm = true
 
   const testiMedia = await NXL.downloadAndSaveMediaMessage(qmsg)
 
@@ -5587,7 +5542,7 @@ case "jpmtesti": {
       new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000))
     ])
   } catch (e) {
-    delete global.statusjpm2
+    delete global.statusjpm
     if (fs.existsSync(testiMedia)) fs.unlinkSync(testiMedia)
     return m.reply(`❌ Gagal fetch grup: ${e.message}`)
   }
@@ -5605,7 +5560,7 @@ case "jpmtesti": {
 
   let testiCount = 0
   for (let i = 0; i < testiFiltered.length; i++) {
-    if (global.stopjpm2) { delete global.stopjpm2; break }
+    if (global.stopjpm) { delete global.stopjpm; break }
     try {
       await NXL.sendMessage(testiFiltered[i], {
         image: fs.readFileSync(testiMedia),
@@ -5620,18 +5575,12 @@ case "jpmtesti": {
   }
 
   if (fs.existsSync(testiMedia)) fs.unlinkSync(testiMedia)
-  delete global.statusjpm2
+  delete global.statusjpm
   await NXL.sendMessage(testiChat, { text: `✅ JPM Testi selesai!\nTerkirim: *${testiCount}/${testiFiltered.length}* grup.` }, { quoted: m })
 }
 break
 
-case "stopjpm2": {
-  if (!isCreator) return m.reply(mess.owner)
-  if (!global.statusjpm2) return m.reply('❌ JPM2 tidak sedang berjalan.')
-  global.stopjpm2 = true
-  m.reply('⛔ Menghentikan JPM2/Testi...')
-}
-break
+// [REMOVED] case "stopjpm2" — digabung ke .stopjpm
 
 // ═══ END FEATURE MERGE ═══
 

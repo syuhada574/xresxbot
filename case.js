@@ -3290,7 +3290,16 @@ case 'caratt': {
       return m.reply('❌ Video tidak ditemukan untuk: ' + text)
     }
 
-    const results = items.sort((a, b) => (b.play_count || 0) - (a.play_count || 0)).slice(0, 5)
+    // Filter relevansi: hanya video yang title/desc/author mengandung keyword
+    const _kwLower = text.toLowerCase().trim()
+    const _filtered = items.filter(v => {
+      const haystack = ((v.title || v.desc || '') + ' ' + (v.author?.unique_id || '')).toLowerCase()
+      return haystack.includes(_kwLower)
+    })
+    // Fallback ke hasil original jika filter kosong
+    const _pool = _filtered.length > 0 ? _filtered : items
+
+    const results = _pool.sort((a, b) => (b.play_count || 0) - (a.play_count || 0)).slice(0, 5)
 
     await m.reply(`✅ Ditemukan ${items.length} video, mengunduh ${results.length} teratas...`)
 

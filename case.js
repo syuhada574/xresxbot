@@ -1232,6 +1232,7 @@ case "allmenu": {
   ┆• .emojimix
   ┆• .pinterest
   ┆• .ttsearch
+  ┆• .gimage
   ┆• .bratvid
   ┆• .ssweb
   ┆• .ffstalk
@@ -3212,7 +3213,19 @@ case "pin":
 
         break;
 
-// [REMOVED] case "gimage" — pollinations.ai sekarang berbayar (402)
+case "gimage": {
+  if (!text) return m.reply(`『 🎨 Gemini Image 』\n\n◇ Contoh: .gimage anime girl with sword`)
+  await m.reply(`『 🎨 』 Generating gambar *${text}*...`)
+  try {
+    const prompt = encodeURIComponent(text)
+    const seed = Math.floor(Math.random() * 99999)
+    const url = `https://image.pollinations.ai/prompt/${prompt}?seed=${seed}&width=1024&height=1024&nologo=true&enhance=true`
+    const imageRes = await fetch(url)
+    const buffer = Buffer.from(await imageRes.arrayBuffer())
+    await NXL.sendMessage(m.chat, { image: buffer, caption: `『 🎨 *AI Image Generator* 』\n「 ${text} 」\n◆━━━━━━━━━━━━━━━━◆\n🌸 *${storename}* 🌸` }, { quoted: m })
+  } catch (e) { m.reply(`❌ Gagal generate gambar.\n${e.message}`) }
+}
+break
 
 case 'play':
 case 'song': {

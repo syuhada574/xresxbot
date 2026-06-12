@@ -3290,11 +3290,12 @@ case 'caratt': {
       return m.reply('❌ Video tidak ditemukan untuk: ' + text)
     }
 
-    // Filter relevansi: hanya video yang title/desc/author mengandung keyword
+    // Filter relevansi: video yang title/desc/author mengandung minimal 1 kata keyword
     const _kwLower = text.toLowerCase().trim()
+    const _kwWords = _kwLower.split(/\s+/).filter(w => w.length > 0)
     const _filtered = items.filter(v => {
       const haystack = ((v.title || v.desc || '') + ' ' + (v.author?.unique_id || '')).toLowerCase()
-      return haystack.includes(_kwLower)
+      return _kwWords.some(w => haystack.includes(w))
     })
     // Fallback ke hasil original jika filter kosong
     const _pool = _filtered.length > 0 ? _filtered : items

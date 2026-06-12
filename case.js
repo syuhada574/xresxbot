@@ -1331,7 +1331,6 @@ case "allmenu": {
   ┆• .autopromo
   ┆• .setpromo
   ┆• .payment
-  ┆• .qris
   ┆• .done
   ┆• .proses
   ╰◙
@@ -1403,24 +1402,6 @@ case "ownermenu": {
 ◆━━━━━━━━━━━━━━━━◆
 🌸 *${storename}* 🌸`,
   }, { quoted: lampuwarna })
-}
-break
-
-case 'qris': {
-  if (!global.qris) return m.reply('❌ Qris tidak tersedia')
-  if (!global._qrisCache) { try { global._qrisCache = fs.readFileSync(global.qris) } catch { return m.reply('❌ Qris tidak tersedia') } }
-  await NXL.sendMessage(m.chat, {
-    image: global._qrisCache,
-    caption: `╭─「 *QRIS PAYMENT* 」
-│
-│  Scan QR di atas untuk bayar
-│  Support semua aplikasi:
-│  GoPay • OVO • DANA • ShopeePay
-│  LinkAja • BSI • BCA Mobile
-│
-│  _Konfirmasi setelah transfer!_
-╰─「 *${storename}* 」`,
-  }, { quoted: m })
 }
 break
 
@@ -4292,7 +4273,7 @@ case 'autojpm': {
 }
 break
 
-// [REMOVED] duplicate case 'stopjpm' — sudah ada di baris 2495
+
 
 case 'jpmswgc': {
   if (!isCreator) return reply(mess.owner)
@@ -5135,8 +5116,6 @@ case "resetwarn": {
 break
 
 // ══════════════════════════════════════════════════════════════
-// ═══ FEATURE MERGE FROM ALIP AI ═══════════════════════════════
-// ══════════════════════════════════════════════════════════════
 
 case "tagadmin": {
   if (!m.isGroup) return m.reply(mess.group)
@@ -5338,7 +5317,7 @@ case "faktadunia": case "faktaunik": {
 }
 break
 
-// [REMOVED] case "infonegara" — restcountries.com API deprecated
+
 
 case "jumlahuser": { m.reply(`👥 *Total User:* ${Object.keys(global.db?.users||{}).length}`) }
 break
@@ -5473,7 +5452,7 @@ case "nyerah": {
 }
 break
 
-// ═══ JPM2 & JPMTESTI — Porting murni dari Alip AI ═══
+// ═══ JPM2 & JPMTESTI ═══
 
 case "jpm2": {
   if (!isCreator) return m.reply(mess.owner)
@@ -5516,7 +5495,7 @@ case "jpm2": {
 
   const jpm2Chat = m.chat
   const jpm2Jenis = jpm2Media ? "teks & foto" : "teks"
-  await m.reply(`⏳ JPM2 (Alip-style) ${jpm2Jenis}\n📋 Target: *${jpm2Filtered.length}* grup\n${jpm2Skipped > 0 ? `⛔ Skip blacklist: *${jpm2Skipped}*` : ''}`)
+  await m.reply(`⏳ JPM2 ${jpm2Jenis}\n📋 Target: *${jpm2Filtered.length}* grup\n${jpm2Skipped > 0 ? `⛔ Skip blacklist: *${jpm2Skipped}*` : ''}`)
 
   let jpm2Count = 0
   for (let i = 0; i < jpm2Filtered.length; i++) {
@@ -5593,7 +5572,7 @@ case "jpmtesti": {
 }
 break
 
-// [REMOVED] case "stopjpm2" — digabung ke .stopjpm
+
 
 // ═══ END FEATURE MERGE ═══
 

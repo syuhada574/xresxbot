@@ -35,7 +35,7 @@ global.ownername  = 'XRESX DIGITAL STORE'
 global.namabot    = '*PT SONTOLOYO*'
 global.owner      = ['6287728163189']
 global.wm         = 'PT SONTOLOYO'
-global.versibot   = '1.5'
+global.versibot   = '2.0'
 global.prefix     = '.'
 global.NXL        = `` // default mode — akan di-override oleh botmode.json di index.js
 global.botMode = `Case`
@@ -53,7 +53,7 @@ global.linkpreview  = 'https://raw.githubusercontent.com/belluptaka/dat3/main/up
 
 
 // ── PAYMENT ───────────────────────────────────────────────────
-global.qris       ="./lib/image/payment/qris.jpeg"
+global.qris       ="./lib/image/payment/qris.jpg"
 global.dana      = ''
 global.ovo       = ''
 global.gopay     = ''

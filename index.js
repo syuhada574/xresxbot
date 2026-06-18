@@ -12,20 +12,12 @@ const { say } = require('cfonts')
 const { Boom } = require('@hapi/boom');
 const { imageToWebp, imageToWebp2, imageToWebp3, videoToWebp, writeExifImg, writeExifImgAV, writeExifVid } = require("./lib/media/sticker.js");
 
-
-const { default: WAConnection, generateWAMessageFromContent, 
+const { default: WAConnection, generateWAMessageFromContent,
 prepareWAMessageMedia, useMultiFileAuthState, Browsers, DisconnectReason, makeInMemoryStore, makeCacheableSignalKeyStore, fetchLatestWaWebVersion, proto, PHONENUMBER_MCC, getAggregateVotesInPollMessage, downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 const pairingCode = global.pairing_code || process.argv.includes('--pairing-code');
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (text) => new Promise((resolve) => rl.question(text, resolve))
-
-/*const { cleaningSession } = require("./lib/boostsession");
-(async () => {
-await setInterval(async () => {
-await cleaningSession("./session")
-}, 10000)
-})()*/
 
 const _cacheFiles = {
   owner:    './database/owner.json',
@@ -42,15 +34,14 @@ function loadCaches() {
   for (const [key, path] of Object.entries(_cacheFiles)) {
     try {
       const mtime = fs.statSync(path).mtimeMs
-      if (_cacheMtime[key] === mtime) continue   // [OPT] file tidak berubah — skip re-read
+      if (_cacheMtime[key] === mtime) continue
       _cacheMtime[key] = mtime
       global.cache[key] = JSON.parse(fs.readFileSync(path))
-    } catch { /* file belum ada — biarkan nilai sebelumnya */ }
+    } catch {  }
   }
 }
 loadCaches()
-setInterval(loadCaches, 30 * 1000) // refresh tiap 30 detik
-//================================================================================
+setInterval(loadCaches, 30 * 1000)
 
 const DataBase = require('./lib/source/database');
 const database = new DataBase();
@@ -61,34 +52,55 @@ const database = new DataBase();
 			users: {},
 			groups: {},
 			database: {},
-			settings : {}, 
+			settings : {},
 			...(loadData || {}),
 		}
 		await database.write(global.db)
 	} else {
 		global.db = loadData
 	}
-	
+
 	setInterval(async () => {
 		if (global.db) await database.write(global.db)
-	}, 30000) // [FAST] dari 3500ms → 30000ms, kurangi I/O disk
+	}, 30000)
 })();
-
-//================================================================================
 
 const { MessagesUpsert, Solving } = require('./lib/source/message')
 const { isUrl, generateMessageTag, getBuffer, getSizeMedia, fetchJson, sleep } = require('./lib/function');
 
-//================================================================================
-
-// ── RECONNECT MANAGER ────────────────────────────────────────
-// Exponential backoff: cegah spam reconnect saat server WA unstable
 let _reconnectDelay = 3000
 let _reconnectTimer = null
 let _isConnecting = false
 
-// ── GROUP CACHE ───────────────────────────────────────────────
-// Prefetch saat bot connect — JPM selalu pakai cache tanpa fetch ulang
+let _lastActivityAt = Date.now()
+let _connectingSince = null
+
+function markActivity() {
+	_lastActivityAt = Date.now()
+}
+
+setInterval(() => {
+	const now = Date.now()
+
+	if (_isConnecting && _connectingSince && (now - _connectingSince) > 2 * 60 * 1000) {
+		console.log(chalk.red('[WATCHDOG] _isConnecting nyangkut >2 menit, reset paksa & reconnect.'))
+		_isConnecting = false
+		_connectingSince = null
+		scheduleReconnect('Watchdog: stuck connecting state')
+		return
+	}
+
+	const IDLE_LIMIT = (global.WATCHDOG_IDLE_MS || 10 * 60 * 1000)
+	if (!_isConnecting && global.botReady && (now - _lastActivityAt) > IDLE_LIMIT) {
+		console.log(chalk.yellow(`[WATCHDOG] Tidak ada aktivitas selama ${Math.round((now - _lastActivityAt)/60000)} menit, paksa reconnect untuk jaga-jaga.`))
+		markActivity()
+		try {
+			if (global._nxlConn?.ws?.close) global._nxlConn.ws.close()
+			else if (global._nxlConn?.end) global._nxlConn.end(new Error('watchdog idle reconnect'))
+		} catch {}
+		scheduleReconnect('Watchdog: idle timeout')
+	}
+}, 60 * 1000)
 
 async function prefetchAllGroups(conn) {
 	try {
@@ -102,17 +114,16 @@ async function prefetchAllGroups(conn) {
 		console.log(chalk.cyan(`[PREFETCH] Cache grup siap: ${Object.keys(groups).length} grup.`))
 	} catch (e) {
 		console.log(chalk.yellow(`[PREFETCH] Gagal memuat cache grup: ${e.message}`))
-		// TIDAK nullify cache — biarkan cache lama jika ada
+
 	}
 }
 
-// Helper: return cache langsung jika ada, fetch hanya jika cache benar-benar kosong
 async function getGroupsCached(conn) {
-	// Cache tersedia — return INSTAN tanpa cek TTL
+
 	if (global.allGroupsCache) {
 		return global.allGroupsCache
 	}
-	// Cache null (pertama kali start / prefetch gagal) — fetch blocking sekali
+
 	const groups = await Promise.race([
 		conn.groupFetchAllParticipating(),
 		new Promise((_, rej) => setTimeout(() => rej(new Error('groupFetchAllParticipating timeout')), 20000))
@@ -130,18 +141,19 @@ function scheduleReconnect(label = '') {
 		_reconnectTimer = null
 		startingBot()
 	}, _reconnectDelay)
-	// Exponential backoff: max 60 detik
+
 	_reconnectDelay = Math.min(_reconnectDelay * 2, 60000)
 }
 
 async function startingBot() {
 	if (_isConnecting) return
 	_isConnecting = true
+	_connectingSince = Date.now()
+	markActivity()
 
 	const store = makeInMemoryStore({ logger: pino().child({ level: 'silent', stream: 'store' }) })
 	const { state, saveCreds } = await useMultiFileAuthState('./session')
 
-	// [FIX] Selalu gunakan versi fallback — fetch ke github sering timeout di VPS
 	let version = [2, 3000, 1035194821]
 	try {
 		const res = await Promise.race([
@@ -150,11 +162,11 @@ async function startingBot() {
 		])
 		const json = await res.json()
 		if (Array.isArray(json.version)) version = json.version
-	} catch { /* pakai fallback */ }
+	} catch {  }
 
 	const NXL = WAConnection({
 		version,
-		// [FIX] Browser Chrome lebih stabil untuk multi-device WA
+
 		browser: Browsers.ubuntu('Chrome'),
 		getMessage: async (key) => {
 			if (store) {
@@ -168,16 +180,15 @@ async function startingBot() {
 		logger: pino({ level: 'silent' }),
 		auth: {
 			creds: state.creds,
-			// [FIX] makeCacheableSignalKeyStore cegah memory leak di sesi panjang
+
 			keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
 		},
-		// [FIX] keepAliveIntervalMs — cegah koneksi mati suri di VPS
+
 		keepAliveIntervalMs: 15000,
-		// [FIX] Batasi retry WA internal agar tidak loop sendiri
+
 		retryRequestDelayMs: 2000,
 	})
 
-	// ✅ Pairing code
 	if (pairingCode && !NXL.authState.creds.registered) {
 		console.log(chalk.yellow('\n𖦹 NOMOR : (contoh: 628xxx)'))
 		let phoneNumber = await question('')
@@ -187,21 +198,19 @@ async function startingBot() {
 		console.log(chalk.magenta.italic('Kode Pairing Kamu :'), chalk.white.bold(code))
 	}
 
-//================================================================================
-
 NXL.ev.on('creds.update', saveCreds)
 
-//================================================================================
-
 NXL.ev.on('connection.update', async (update) => {
+		markActivity()
 		const { connection, lastDisconnect, receivedPendingNotifications } = update
 
 		if (connection === 'close') {
 			_isConnecting = false
+			_connectingSince = null
+			markActivity()
 			const err = lastDisconnect?.error
 			const reason = new Boom(err)?.output?.statusCode
 
-			// [FIX] Hentikan JPM/SWGC saat disconnect agar loop tidak terus kirim ke socket mati
 			global.stopjpm = true
 			global.stopswgc = true
 
@@ -214,7 +223,7 @@ NXL.ev.on('connection.update', async (update) => {
 				exec('rm -rf ./session/*')
 				process.exit(0)
 			} else {
-				// Semua alasan lain: reconnect otomatis dengan backoff
+
 				const label = {
 					[DisconnectReason.connectionLost]    : 'Connection Lost',
 					[DisconnectReason.connectionClosed]  : 'Connection Closed',
@@ -228,30 +237,30 @@ NXL.ev.on('connection.update', async (update) => {
 		}
 
 		if (connection === 'open') {
-			// Reset backoff setelah berhasil connect
+
 			_reconnectDelay = 3000
 			_isConnecting = false
+			_connectingSince = null
+			markActivity()
 			global.stopjpm = false
 			global.stopswgc = false
-			// [FIX] botReady=false dulu — JPM tidak boleh berjalan sampai socket benar-benar stabil
+
 			global.botReady = false
-			// Cache grup TIDAK di-nullify — biarkan cache lama agar JPM bisa langsung pakai
-			// Prefetch akan update cache di background setelah botReady
+
 			global.allGroupsCacheTime = 0
-			// [OPT] Reset cached JIDs — bisa berubah jika session baru
+
 			global._cachedBotNumber    = null
 			global._cachedCreatorJids  = null
 			global._cachedPremiumJids  = null
-			global._qrisCache          = null   // qris path bisa berubah via settings
+			global._qrisCache          = null
 			console.log(chalk.green.bold(`[CONNECTED] NXL Bot Online ✓`))
-			// Safety fallback: jika receivedPendingNotifications tidak pernah muncul
-			// (sesi lama yang tidak punya pending), set botReady setelah 20 detik
+
 			if (global._botReadyTimer) clearTimeout(global._botReadyTimer)
 			global._botReadyTimer = setTimeout(() => {
 				if (!global.botReady) {
 					global.botReady = true
 					console.log(chalk.cyan('[INFO] Bot siap menerima perintah JPM. (fallback 20s)'))
-					// Prefetch groups setelah bot ready
+
 					prefetchAllGroups(NXL)
 				}
 			}, 20000)
@@ -259,49 +268,43 @@ NXL.ev.on('connection.update', async (update) => {
 
 		if (receivedPendingNotifications === true) {
 			console.log(chalk.cyan('[INFO] Menerima pending messages, harap tunggu...'))
-			// [FIX] Setelah pending selesai, bot benar-benar siap
-			// Safety fallback: jika event ini tidak muncul, set ready setelah 20 detik
+
 			if (global._botReadyTimer) clearTimeout(global._botReadyTimer)
 			global._botReadyTimer = setTimeout(() => {
 				global.botReady = true
 				console.log(chalk.cyan('[INFO] Bot siap menerima perintah JPM.'))
-				// Prefetch groups di background setelah bot ready — tanpa blocking
+
 				prefetchAllGroups(NXL)
 			}, 3000)
 		}
 	});
 
-
 store.bind(NXL.ev)
-// [FIX FATAL-1] Expose store ke global agar case.js bisa akses global.store.chats (jpmch, cekch, autopromosi)
+
 global.store = store
 global._nxlConn = NXL
-// [FIX FATAL-2] Expose sleep ke global agar case.js bisa akses global.sleep (pushkontak-response)
+
 global.sleep = (ms) => new Promise(r => setTimeout(r, ms))
-// [OPT] Expose getGroupsCached ke global agar JPM pakai cache, bukan fetch ulang setiap saat
+
 global.getGroupsCached = () => getGroupsCached(NXL)
-// [OPT] Expose prefetchAllGroups ke global agar case.js bisa trigger pending refresh setelah JPM selesai
+
 global.prefetchAllGroups = () => prefetchAllGroups(NXL)
 
-// Baca mode tersimpan dari database/botmode.json saat restart
-// Kalau file ada → pakai mode yang terakhir disimpan
-// Kalau file belum ada → fallback ke settings.js
 try {
 	const savedMode = JSON.parse(fs.readFileSync('./database/botmode.json', 'utf-8'))
 	NXL.public = typeof savedMode.public === 'boolean' ? savedMode.public : global.NXL !== 'self'
 	console.log(chalk.cyan(`[MODE] Bot dimulai dalam mode: ${NXL.public ? 'PUBLIC' : 'SELF'} (dari database/botmode.json)`))
 } catch {
-	// File belum ada, pakai default dari settings.js
+
 	NXL.public = global.NXL !== 'self'
 	console.log(chalk.cyan(`[MODE] Bot dimulai dalam mode: ${NXL.public ? 'PUBLIC' : 'SELF'} (dari settings.js)`))
 }
 
 await Solving(NXL, store)
-	
-//================================================================================
-	
+
 NXL.ev.on('messages.upsert', async (message) => {
-  // ==================== ANTILINK HANDLER ====================
+  markActivity()
+
   try {
     const m = message.messages[0]
     if (!m || m.key.fromMe) return await MessagesUpsert(NXL, message, store)
@@ -319,20 +322,16 @@ NXL.ev.on('messages.upsert', async (message) => {
     const senderNum = sender?.split('@')[0]
     const botNum = NXL.user?.id?.split(':')[0]
 
-    // Jangan proses pesan dari bot sendiri
     if (senderNum === botNum) return await MessagesUpsert(NXL, message, store)
 
-    // [OPT] Cek isOwner dulu (sync, tanpa network) — jika owner, skip groupMetadata sepenuhnya
     const isOwner = (global.cache?.owner || []).map(v => v.replace(/[^0-9]/g, '') + '@s.whatsapp.net').includes(sender)
     if (isOwner) return await MessagesUpsert(NXL, message, store)
 
-    // [OPT] Cek URL dulu sebelum groupMetadata — jika tidak ada link, tidak perlu fetch admin list
     const urlRegex = /(?:https?:\/\/)?(?:www\.)?[^\s]+\.[^\s]+|chat\.whatsapp\.com\/[A-Za-z0-9]+|wa\.me\/\d+|api\.wa\.me\/(?:send\?phone=)?\d+|api\.whatsapp\.com\/send\?[^\s]+|wa\.link\/[A-Za-z0-9]+/gi
     const waLinkRegex = /(?:https?:\/\/)?(?:chat\.whatsapp\.com\/[A-Za-z0-9]+|wa\.me\/\d+|api\.wa\.me\/(?:send\?phone=)?\d+|api\.whatsapp\.com\/send\?[^\s]+|wa\.link\/[A-Za-z0-9]+)/gi
     const hasLink = body ? (urlRegex.test(body) || waLinkRegex.test(body)) : false
     if (!hasLink) return await MessagesUpsert(NXL, message, store)
 
-    // Ada link — baru cek apakah sender adalah admin
     let groupMeta = null
     try { groupMeta = await NXL.groupMetadata(from) } catch {}
     const groupAdmins = groupMeta?.participants?.filter(p => p.admin)?.map(p => p.id) || []
@@ -352,7 +351,7 @@ NXL.ev.on('messages.upsert', async (message) => {
             text: `⚠️ @${senderNum} dilarang mengirim link di grup ini!\n📵 Pesan telah dihapus.`,
             mentions: [sender]
           })
-          return // stop, jangan lanjut ke MessagesUpsert
+          return
         }
         if (antilink2List.includes(from)) {
           try { await NXL.sendMessage(from, { delete: m.key }) } catch {}
@@ -361,19 +360,16 @@ NXL.ev.on('messages.upsert', async (message) => {
             mentions: [sender]
           })
           try { await NXL.groupParticipantsUpdate(from, [sender], 'remove') } catch {}
-          return // stop, jangan lanjut ke MessagesUpsert
+          return
         }
       }
     }
   } catch (e) {
     console.error('[ANTILINK ERROR]', e.message)
   }
-  // ==================== END ANTILINK ====================
 
   await MessagesUpsert(NXL, message, store);
 });
-
-//================================================================================
 
 NXL.ev.on('contacts.update', (update) => {
 		for (let contact of update) {
@@ -381,14 +377,12 @@ NXL.ev.on('contacts.update', (update) => {
 			if (store && store.contacts) {
 				const existing = store.contacts[id] || {}
 				store.contacts[id] = { ...existing, id, name: contact.notify }
-				// Simpan juga lid kalau ada, dipakai resolveToPhoneJid untuk konversi @lid → @s.whatsapp.net
+
 				if (contact.lid) store.contacts[id].lid = contact.lid
 			}
 		}
 });
 
-//================================================================================
-	
 NXL.ev.on('group-participants.update', async (update) => {
 const { id, author, participants, action } = update
 	try {
@@ -403,7 +397,7 @@ const { id, author, participants, action } = update
       }
     }
   }
-  // FIX: gunakan global.cache.welcome (array dari welcome.json) bukan global.db.groups
+
   const welcomeList = global.cache?.welcome || []
   if (welcomeList.includes(id)) {
     const metadata = await NXL.groupMetadata(id)
@@ -433,7 +427,7 @@ const { id, author, participants, action } = update
 await NXL.relayMessage(id, {
   "productMessage": {
     "product": {
-      "productImage": imguser.imageMessage, 
+      "productImage": imguser.imageMessage,
       "productId": "343056591714248",
       "title": "Welcome To Group",
       "description": `Selamat datang @${n.split('@')[0]}`,
@@ -456,7 +450,7 @@ await NXL.relayMessage(id, {
         await NXL.relayMessage(id, {
   "productMessage": {
     "product": {
-      "productImage": imguser.imageMessage, 
+      "productImage": imguser.imageMessage,
       "productId": "343056591714248",
       "title": "Leaving To Group",
       "description": `Selamat tinggal @${n.split("@")[0]}`,
@@ -479,7 +473,7 @@ await NXL.relayMessage(id, {
         await NXL.relayMessage(id, {
   "productMessage": {
     "product": {
-      "productImage": imguser.imageMessage, 
+      "productImage": imguser.imageMessage,
       "productId": "343056591714248",
       "title": "Promote Member",
       "description": `Promote member @${n.split("@")[0]}`,
@@ -502,7 +496,7 @@ await NXL.relayMessage(id, {
         await NXL.relayMessage(id, {
   "productMessage": {
     "product": {
-      "productImage": imguser.imageMessage, 
+      "productImage": imguser.imageMessage,
       "productId": "343056591714248",
       "title": "Demote Member",
       "description": `Demote member @${n.split("@")[0]}`,
@@ -520,9 +514,6 @@ await NXL.relayMessage(id, {
 } catch (e) {}
 });
 
-//================================================================================
-
-//#STICKER
 NXL.sendImageAsSticker = async (jid, path, quoted, options = {}) => {
 let buff = Buffer.isBuffer(path) ? path : /^data:.*?\/.*?;base64,/i.test(path) ? Buffer.from(path.split`,`[1], 'base64') : /^https?:\/\//.test(path) ? await (await getBuffer(path)) : fs.existsSync(path) ? fs.readFileSync(path) : Buffer.alloc(0)
 let buffer
@@ -552,7 +543,7 @@ buffer = await writeExifImg(buff, options)
 buffer = await imageToWebp3(buff)}
 await NXL.sendMessage(jid, { sticker: { url: buffer }, ...options }, { quoted })
 return buffer}
- //=================================================//
+
 NXL.sendVideoAsSticker = async (jid, path, quoted, options = {}) => {
 let buff = Buffer.isBuffer(path) ? path : /^data:.*?\/.*?;base64,/i.test(path) ? Buffer.from(path.split`,`[1], 'base64') : /^https?:\/\//.test(path) ? await (await getBuffer(path)) : fs.existsSync(path) ? fs.readFileSync(path) : Buffer.alloc(0)
 let buffer
@@ -563,9 +554,125 @@ buffer = await videoToWebp(buff)}
 await NXL.sendMessage(jid, { sticker: { url: buffer }, ...options }, { quoted })
 return buffer}
 
+if (!global.anticallWarnings) global.anticallWarnings = {}
+
+NXL.ev.on('call', async (calls) => {
+  try {
+    if (!global.anticallgcList) {
+      try {
+        global.anticallgcList = JSON.parse(fs.readFileSync('./database/anticallgc.json', 'utf8'))
+      } catch {
+        global.anticallgcList = []
+      }
+    }
+    if (!global.anticallWarnings) global.anticallWarnings = {}
+
+    const anticallgcList = global.anticallgcList
+
+    const botJid = NXL.decodeJid ? NXL.decodeJid(NXL.user.id) : (NXL.user.id.split(':')[0] + '@s.whatsapp.net')
+    const ownerNums = (global.cache?.owner || []).map(v => v.replace(/[^0-9]/g, '') + '@s.whatsapp.net')
+
+    for (const call of calls) {
+      const callerId = NXL.decodeJid ? NXL.decodeJid(call.from) : call.from
+
+      if (!call.isGroup) continue
+      if (call.status && !['offer', 'ringing'].includes(call.status)) continue
+
+      try { await NXL.rejectCall(call.id, callerId) } catch {}
+
+      if (typeof areJidsSameUser === 'function' ? areJidsSameUser(callerId, botJid) : callerId === botJid) continue
+      if (ownerNums.includes(callerId)) continue
+
+      let groupId = null
+      let groupMeta = null
+
+      for (const gid of anticallgcList) {
+        try {
+          const meta = await NXL.groupMetadata(gid).catch(() => null)
+
+          const inGroup = meta?.participants?.some(p =>
+            (typeof areJidsSameUser === 'function' ? areJidsSameUser(p.id, callerId) : p.id === callerId)
+          )
+          if (inGroup) {
+            groupId = gid
+            groupMeta = meta
+            break
+          }
+        } catch {}
+      }
+
+      if (!groupId || !groupMeta) continue
+
+      try { groupMeta = await NXL.groupMetadata(groupId).catch(() => groupMeta) } catch {}
+
+      const participants = groupMeta?.participants || []
+
+      const groupAdmins = participants.filter(p => p.admin).map(p => p.id) || []
+      const isAdmin = groupAdmins.some(adminId =>
+        typeof areJidsSameUser === 'function' ? areJidsSameUser(adminId, callerId) : adminId === callerId
+      )
+
+      if (isAdmin) continue
+
+      const isBotAdmin = participants.some(p =>
+        ((p.id && (typeof areJidsSameUser === 'function' ? areJidsSameUser(p.id, botJid) : p.id === botJid)) ||
+        (p.lid && p.lid === p.id)) && p.admin
+      )
+
+      const callerNum = callerId.split('@')[0]
+      const timeNow = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })
+      const warnKey = `${groupId}__${callerId}`
+
+      if (!global.anticallWarnings[warnKey]) global.anticallWarnings[warnKey] = 0
+      global.anticallWarnings[warnKey]++
+
+      const warnCount = global.anticallWarnings[warnKey]
+
+      if (warnCount === 1) {
+
+        await NXL.sendMessage(groupId, {
+          text:
+            `📵 *ANTI CALL GRUP AKTIF*\n\n` +
+            `⚠️ @${callerNum} melakukan panggilan di grup ini!\n\n` +
+            `🚫 *Panggilan di grup dilarang.*\n` +
+            `⏰ Waktu: ${timeNow}\n\n` +
+            `⚠️ *Ini peringatan ke-1.* Jika melakukan panggilan lagi, kamu akan dikick!\n\n` +
+            `_Harap patuhi peraturan grup!_`,
+          mentions: [callerId]
+        })
+      } else if (warnCount >= 2) {
+
+        await NXL.sendMessage(groupId, {
+          text:
+            `🚨 *KICK OTOMATIS*\n\n` +
+            `@${callerNum} telah melakukan panggilan untuk ke-${warnCount} kalinya!\n\n` +
+            `🚫 *Dikeluarkan dari grup.*\n` +
+            `⏰ Waktu: ${timeNow}`,
+          mentions: [callerId]
+        })
+
+        if (isBotAdmin) {
+          try {
+            await NXL.groupParticipantsUpdate(groupId, [callerId], 'remove')
+            delete global.anticallWarnings[warnKey]
+          } catch (err) {
+            console.error('Gagal mengeksekusi kick:', err)
+          }
+        } else {
+          await NXL.sendMessage(groupId, {
+            text: `⚠️ Bot tidak bisa kick @${callerNum} karena bot bukan admin grup.`,
+            mentions: [callerId]
+          })
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[ANTICALLGC ERROR]', e?.message || e)
+  }
+})
 NXL.ev.on('groups.update', async (update) => {
 		try {
-		// Kalau notifGrup off, skip semua notifikasi perubahan grup
+
 		if (global.notifGrup === false) return
 
 		const data = update[0]
@@ -580,28 +687,27 @@ NXL.ev.on('groups.update', async (update) => {
       }
     }
   }
-		if (data?.inviteCode) {      
+		if (data?.inviteCode) {
 		let botNumber = NXL.user.id.split(":")[0]
 		let participant = data.author
-		if (participant.split("@")[0] === botNumber) return      
+		if (participant.split("@")[0] === botNumber) return
   await NXL.sendMessage(data.id, {text: `@${participant.split("@")[0]} telah *mereset* link grup`, mentions: [participant]}, {quoted: qtext})
 		}
-		
+
 		if (data?.desc) {
 		let botNumber = NXL.user.id.split(":")[0]
 		let participant = data.author
-		if (participant.split("@")[0] === botNumber) return      
+		if (participant.split("@")[0] === botNumber) return
 		await NXL.sendMessage(data.id, {text: `@${participant.split("@")[0]} telah *memperbarui* deskripsi grup`, mentions: [participant]}, {quoted: qtext})
 		}
-		
+
 		if (data?.subject) {
 		let botNumber = NXL.user.id.split(":")[0]
 		let participant = data.author
-		if (participant.split("@")[0] === botNumber) return      
+		if (participant.split("@")[0] === botNumber) return
 		await NXL.sendMessage(data.id, {text: `@${participant.split("@")[0]} telah *mengganti* nama grup`, mentions: [participant]}, {quoted: qtext})
-		}		
-		
-		
+		}
+
 		} catch (e) {
 		}
 });
@@ -620,7 +726,7 @@ NXL.ev.on('groups.update', async (update) => {
         }
 
         const type = await FileType.fromBuffer(buffer);
-        // [FIX #8] Pastikan folder Tmp ada sebelum menulis file
+
         if (!fs.existsSync('./Tmp')) fs.mkdirSync('./Tmp', { recursive: true })
         const trueFileName = attachExtension ? `./Tmp/${fil}.${type.ext}` : filename;
         fs.writeFileSync(trueFileName, buffer);
@@ -628,16 +734,12 @@ NXL.ev.on('groups.update', async (update) => {
         return trueFileName;
     };
 
-//================================================================================
-
 return NXL
 
 }
 
-
 startingBot()
 
-// ── MEMORY CLEANUP ────────────────────────────────────────────
 setInterval(() => {
 	if (global._processedMsgIds && global._processedMsgIds.size > 200) global._processedMsgIds.clear()
 	if (global.groupCacheTime) {
@@ -653,12 +755,9 @@ setInterval(() => {
 	if (typeof global.gc === 'function') global.gc()
 }, 10 * 60 * 1000)
 
-// ── GROUP CACHE BACKGROUND REFRESH ────────────────────────────
-// Refresh cache grup setiap 6 jam — safety update agar data tidak terlalu stale
-// TIDAK boleh berjalan saat JPM aktif — ditandai pending dan dijalankan setelah JPM selesai
 setInterval(() => {
 	if (global.botReady && global._nxlConn) {
-		// Jika JPM sedang berjalan — tandai pending, jangan refresh sekarang
+
 		if (global.statusjpm) {
 			global.pendingGroupsRefresh = true
 			return
@@ -670,7 +769,6 @@ setInterval(() => {
 	}
 }, 6 * 60 * 60 * 1000)
 
-// ── GLOBAL ERROR GUARD ────────────────────────────────────────
 process.on('uncaughtException', (err) => {
 	console.error(chalk.red('[UNCAUGHT]'), err?.message || err)
 })
@@ -678,11 +776,3 @@ process.on('unhandledRejection', (reason) => {
 	console.error(chalk.red('[UNHANDLED]'), reason?.message || reason)
 })
 
-// [FIX #1] variable 'file' hilang setelah refactor — define ulang sebelum watchFile
-let file = require.resolve(__filename)
-fs.watchFile(file, () => {
-	fs.unwatchFile(file)
-	console.log(chalk.redBright(`Update ${__filename}`))
-	delete require.cache[file]
-	require(file)
-});

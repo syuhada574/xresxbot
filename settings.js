@@ -47,7 +47,7 @@ global.urlc2        = ''
 global.linktambahan = 'vpnlancar.pakde-premium.xyz'
 global.linkweb      = 'vpnlancar.pakde-premium.xyz'
 global.linkchannel  = ''
-global.linkChannel  = ''  // [FIX #1] case.js pakai linkChannel (kapital C) — beda dari linkchannel
+global.idsal = '120363427490791352@newsletter'
 global.linkGrup     = ''  // [FIX #1] case.js pakai linkGrup — sebelumnya tidak ada, crash .done/.proses/.ps
 global.linkpreview  = 'https://raw.githubusercontent.com/belluptaka/dat3/main/uploads/bb3ff5-1771233100633.jpg'
 

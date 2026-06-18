@@ -7597,6 +7597,193 @@ Dibuat   : ${data.ceated_at}
   break;
 }
 
+case 'done': case 'done1': case 'done2': case 'done3': case 'done4': case 'done5':
+case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
+  if (!isCreator) return reply(global.mess.owner)
+  if (!m.quoted) return reply('⚠️ Reply formulir pembelian customer untuk menggunakan fitur ini.')
+
+  try {
+    // Determine device count from command
+    let jumlahPerangkat = 1
+    const cmdNum = command.replace('done', '')
+    if (cmdNum && !isNaN(cmdNum)) {
+      jumlahPerangkat = parseInt(cmdNum)
+    }
+    if (jumlahPerangkat < 1) jumlahPerangkat = 1
+
+    // Get customer number from the person who sent the replied message
+    const customerJid = m.quoted.sender || m.quoted.participant || ''
+    const customerNumber = customerJid.split('@')[0]
+    if (!customerNumber) return reply('⚠️ Tidak dapat mendeteksi nomor customer dari pesan yang direply.')
+
+    // Parse form data from quoted message
+    const formText = m.quoted.text || m.quoted.body || m.quoted.caption || ''
+    if (!formText) return reply('⚠️ Pesan yang direply tidak mengandung teks formulir.')
+
+    // Extract form fields (flexible parsing)
+    const getField = (text, keys) => {
+      for (const key of keys) {
+        const regex = new RegExp(`${key}\\s*[=:]+\\s*(.+)`, 'i')
+        const match = text.match(regex)
+        if (match) return match[1].trim()
+      }
+      return null
+    }
+
+    const namaCustomer = getField(formText, ['NAMA', 'NAME', 'CUSTOMER']) || pushname || customerNumber
+    const serverRaw = getField(formText, ['SERVER', 'SV', 'LOKASI', 'LOC'])
+    const durasiRaw = getField(formText, ['DURASI', 'DURATION', 'HARI', 'MASA AKTIF', 'AKTIF'])
+
+    if (!serverRaw) return reply('⚠️ Field SERVER tidak ditemukan di formulir.\nPastikan formulir mengandung: SERVER = SG/ID')
+    if (!durasiRaw) return reply('⚠️ Field DURASI tidak ditemukan di formulir.\nPastikan formulir mengandung: DURASI = 30')
+
+    // Parse server
+    const serverNorm = serverRaw.toUpperCase().trim()
+    let serverCode = null
+    if (serverNorm.includes('SG') || serverNorm.includes('SINGAP') || serverNorm.includes('SINGAPORE')) {
+      serverCode = 'SG'
+    } else if (serverNorm.includes('ID') || serverNorm.includes('INDO') || serverNorm.includes('INDONESIA')) {
+      serverCode = 'ID'
+    }
+    if (!serverCode) return reply(`⚠️ Server "${serverRaw}" tidak dikenali.\nGunakan: SG atau ID`)
+
+    // Parse durasi
+    const durasiMatch = durasiRaw.match(/(\d+)/)
+    if (!durasiMatch) return reply(`⚠️ Durasi "${durasiRaw}" tidak valid.\nGunakan angka, contoh: 30`)
+    const durasi = parseInt(durasiMatch[1])
+
+    // Load pricelist and find matching price
+    let pricelist = []
+    try {
+      pricelist = JSON.parse(fs.readFileSync('./database/pricelist.json', 'utf8'))
+    } catch {
+      return reply('⚠️ Database pricelist tidak ditemukan atau rusak.')
+    }
+
+    const priceEntry = pricelist.find(p =>
+      p.server.toUpperCase() === serverCode &&
+      p.durasi === durasi &&
+      p.perangkat === jumlahPerangkat
+    )
+
+    if (!priceEntry) {
+      return reply(
+        `⚠️ Harga tidak ditemukan untuk kombinasi:\n` +
+        `• Server: ${serverCode}\n` +
+        `• Durasi: ${durasi} hari\n` +
+        `• Perangkat: ${jumlahPerangkat} IP\n\n` +
+        `Pastikan data ada di database/pricelist.json`
+      )
+    }
+
+    const harga = priceEntry.harga
+    const tanggalNow = moment().tz('Asia/Jakarta').format('DD MMMM YYYY')
+
+    // React to show processing
+    await NXL.sendMessage(m.chat, { react: { text: '⏳', key: m.key } })
+
+    // Generate testimony image
+    const { generateTestimonyImage, formatRupiah } = require('./lib/testimony')
+    const imgBuffer = generateTestimonyImage({
+      nama: namaCustomer,
+      server: serverCode,
+      durasi: durasi,
+      perangkat: jumlahPerangkat,
+      harga: harga,
+      nomor: customerNumber,
+      tanggal: tanggalNow
+    })
+
+    // Build caption for channel & status
+    const caption = `*TRANSAKSI BERHASIL*\n\n` +
+      `┌─────────────────────\n` +
+      `│ *Customer:* ${namaCustomer}\n` +
+      `│ *Server:* ${serverCode === 'SG' ? 'Singapore' : 'Indonesia'}\n` +
+      `│ *Durasi:* ${durasi} Hari\n` +
+      `│ *Perangkat:* ${jumlahPerangkat} IP\n` +
+      `│ *Harga:* ${formatRupiah(harga)}\n` +
+      `│ *Tanggal:* ${tanggalNow}\n` +
+      `└─────────────────────\n\n` +
+      `Terima kasih telah berbelanja di *XRESX DIGITAL VPN* ✓\n` +
+      `_Layanan VPN Premium Terpercaya_`
+
+    // === SEND TO CHANNEL ===
+    const channelJid = global.idsal || ''
+    let channelSent = false
+    if (channelJid) {
+      try {
+        await NXL.sendMessage(channelJid, {
+          image: imgBuffer,
+          caption: caption
+        })
+        channelSent = true
+      } catch (chErr) {
+        console.log('[DONE] Gagal kirim ke channel:', chErr.message)
+      }
+    }
+
+    // === SEND TO WHATSAPP STATUS ===
+    try {
+      // Try to share to status (status@broadcast)
+      await NXL.sendMessage('status@broadcast', {
+        image: imgBuffer,
+        caption: caption
+      }, {
+        statusJidList: undefined // sends to all contacts
+      })
+    } catch (stErr) {
+      console.log('[DONE] Gagal kirim ke status:', stErr.message)
+      // Fallback: try without statusJidList
+      try {
+        await NXL.sendMessage('status@broadcast', {
+          image: imgBuffer,
+          caption: caption
+        })
+      } catch (stErr2) {
+        console.log('[DONE] Fallback status juga gagal:', stErr2.message)
+      }
+    }
+
+    // === SEND COMPLETION MESSAGE TO OWNER ===
+    await NXL.sendMessage(m.chat, { react: { text: '✅', key: m.key } })
+
+    const completionMsg = `✅ *TRANSAKSI SELESAI*\n\n` +
+      `• Customer: ${namaCustomer}\n` +
+      `• Nomor: wa.me/${customerNumber}\n` +
+      `• Server: ${serverCode === 'SG' ? 'Singapore' : 'Indonesia'}\n` +
+      `• Durasi: ${durasi} Hari\n` +
+      `• Perangkat: ${jumlahPerangkat} IP\n` +
+      `• Harga: ${formatRupiah(harga)}\n` +
+      `• Tanggal: ${tanggalNow}\n\n` +
+      `📢 Channel: ${channelSent ? '✓ Terkirim' : '✗ Gagal/Tidak dikonfigurasi'}\n` +
+      `📱 Status WA: ✓ Diproses\n\n` +
+      `_Gunakan .done${jumlahPerangkat > 1 ? jumlahPerangkat : ''} untuk ${jumlahPerangkat} perangkat_`
+
+    await NXL.sendMessage(m.chat, { image: imgBuffer, caption: completionMsg }, { quoted: m })
+
+    // === SEND THANK YOU TO CUSTOMER ===
+    try {
+      const thankMsg = `✅ *Pesanan Kamu Sudah Selesai!*\n\n` +
+        `Halo *${namaCustomer}*,\n` +
+        `Pesanan VPN kamu sudah aktif:\n\n` +
+        `• Server: ${serverCode === 'SG' ? 'Singapore' : 'Indonesia'}\n` +
+        `• Durasi: ${durasi} Hari\n` +
+        `• Perangkat: ${jumlahPerangkat} IP\n\n` +
+        `Terima kasih telah berbelanja di *XRESX DIGITAL VPN* 🙏\n` +
+        `Jika ada kendala, silakan hubungi admin.\n\n` +
+        `_PT SONTOLOYO_`
+      await NXL.sendMessage(customerJid, { text: thankMsg })
+    } catch (custErr) {
+      console.log('[DONE] Gagal kirim ucapan ke customer:', custErr.message)
+    }
+
+  } catch (err) {
+    console.error('[DONE ERROR]', err)
+    reply('❌ Terjadi error saat memproses .done: ' + (err.message || err))
+  }
+}
+break
+
 default:
 if (budy.startsWith('=>')) {
 if (!isCreator) return

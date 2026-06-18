@@ -46,9 +46,9 @@ global.urlc1        = ''
 global.urlc2        = ''
 global.linktambahan = 'vpnlancar.pakde-premium.xyz'
 global.linkweb      = 'vpnlancar.pakde-premium.xyz'
-global.linkchannel  = ''
-global.idsal = '120363427490791352@newsletter'
-global.linkGrup     = ''  // [FIX #1] case.js pakai linkGrup — sebelumnya tidak ada, crash .done/.proses/.ps
+global.linkchannel  = 'https://whatsapp.com/channel/0029VadYQe7G3R3g3WecRM0h'
+global.idsal = '120363275694082356@newsletter'
+global.linkGrup     = 'https://chat.whatsapp.com/CrYDg5Az8Ol1XidwvAFRoO'
 global.linkpreview  = 'https://raw.githubusercontent.com/belluptaka/dat3/main/uploads/bb3ff5-1771233100633.jpg'
 
 

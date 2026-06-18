@@ -2065,114 +2065,28 @@ return m.reply(teks)
 }
 break
 
-case "done": case "don": case "done1": case "done2": case "done3": case "done4":
-case "proses": case "ps": {
-  if (!isCreator) return m.reply(mess.owner)
+case "done":
+case "don":
+case "proses":
+case "ps": {
+  if (!isCreator) return m.reply(mess.owner);
+  if (!text) return m.reply(`*Contoh :* ${command} nama barang`);
+  const status = /done|don/.test(command) ? "Transaksi Done ✅" : "Dana Telah Diterima ✅";
+  const teks = `${status}
 
-  // Tentukan jumlah perangkat dari command
-  const _ipMatch = command.match(/done(\d+)/)
-  const _jumlahIP = _ipMatch ? parseInt(_ipMatch[1]) : 1
+📦 Pembelian: ${text}
+🗓️ Tanggal: ${tanggal(Date.now())}
 
-  // Cek harus reply formulir
-  if (!m.quoted) return m.reply('❌ Reply formulir customer yang sudah diisi terlebih dahulu.')
+📢 Cek Testimoni Pembeli:
+${global.linkchannel.split("https://")[1] || "-"}
 
-  const _formText = m.quoted.text || m.quoted.body || ''
-  if (!_formText.trim()) return m.reply('❌ Pesan yang direply tidak berisi formulir.')
-
-  // Parse formulir
-  const _parseField = (labels) => {
-    for (const label of labels.split('|')) {
-      const regex = new RegExp(label.trim() + '\\s*[=:]\\s*(.+)', 'i')
-      const match = _formText.match(regex)
-      if (match) return match[1].trim()
+📣 Gabung Grup Share & Promosi:
+${global.linkGrup.split("https://")[1] || "-"}`;
+  await NXL.sendMessage(m.chat, {
+    text: teks,
+    contextInfo: {
     }
-    return ''
-  }
-
-  const _nama = _parseField('NAMA')
-  const _kartu = _parseField('KARTU')
-  const _paket = _parseField('NAMA PAKET')
-  const _hari = _parseField('BERAPA HARI')
-  const _provinsi = _parseField('TKP / PROVINSI|TKP|PROVINSI')
-  const _aplikasi = _parseField('APLIKASI VPN|APLIKASI')
-  const _vpnType = _parseField('SSH ATAU V2RAY|SSH/V2RAY|TIPE VPN')
-  const _server = _parseField('SERVER SG / ID|SERVER|LOKASI SERVER')
-
-  // Validasi
-  const _fields = { NAMA: _nama, KARTU: _kartu, 'NAMA PAKET': _paket, 'BERAPA HARI': _hari, PROVINSI: _provinsi, 'APLIKASI VPN': _aplikasi, 'SSH/V2RAY': _vpnType, SERVER: _server }
-  const _empty = Object.entries(_fields).filter(([k, v]) => !v)
-  if (_empty.length > 0) {
-    return m.reply(`❌ Formulir belum lengkap.\n\nField kosong:\n${_empty.map(([k]) => `• ${k}`).join('\n')}\n\n_Pastikan customer mengisi semua field._`)
-  }
-
-  // Nomor customer dari pengirim formulir
-  const _customerJid = m.quoted.sender || m.quoted.participant || ''
-  const _customerNum = _customerJid.split('@')[0]
-
-  // Cari harga dari pricelist
-  let _harga = 0, _hargaStr = 'Harga Tidak Ditemukan'
-  try {
-    const _pl = JSON.parse(fs.readFileSync('./database/pricelist.json', 'utf-8'))
-    const _srv = _server.toUpperCase().includes('SG') ? 'SG' : 'ID'
-    const _dur = _hari.replace(/[^0-9]/g, '')
-    const _ip = String(_jumlahIP)
-    if (_pl[_srv]?.[_dur]?.[_ip]) { _harga = _pl[_srv][_dur][_ip]; _hargaStr = `Rp ${_harga.toLocaleString('id-ID')}` }
-  } catch {}
-
-  // Counter TRX
-  let _trxNum = 1
-  try { const _c = JSON.parse(fs.readFileSync('./database/trxcounter.json', 'utf-8')); _trxNum = (_c.count || 0) + 1 } catch {}
-  fs.writeFileSync('./database/trxcounter.json', JSON.stringify({ count: _trxNum }, null, 2))
-  const _trxId = `TRX #${String(_trxNum).padStart(6, '0')}`
-
-  const _srvLabel = _server.toUpperCase().includes('SG') ? 'Singapore' : 'Indonesia'
-
-  await NXL.sendMessage(m.chat, { react: { text: '⏳', key: m.key } })
-
-  // === GENERATE IMAGE ===
-  let _imgBuffer = null
-  try {
-    const { createCanvas } = require('canvas')
-    const W = 800, H = 520, canvas = createCanvas(W, H), ctx = canvas.getContext('2d')
-    const grad = ctx.createLinearGradient(0, 0, W, H)
-    grad.addColorStop(0, '#0f0c29'); grad.addColorStop(0.5, '#302b63'); grad.addColorStop(1, '#24243e')
-    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H)
-    ctx.strokeStyle = '#00e676'; ctx.lineWidth = 3; ctx.strokeRect(15, 15, W-30, H-30)
-    ctx.fillStyle = '#00e676'; ctx.font = 'bold 28px sans-serif'; ctx.fillText('✓ ORDER BERHASIL', 40, 60)
-    ctx.fillStyle = '#fff'; ctx.font = '16px sans-serif'; ctx.fillText(_trxId, 40, 90)
-    ctx.fillStyle = '#00e676'; ctx.font = 'bold 32px sans-serif'; ctx.textAlign = 'right'; ctx.fillText(_hargaStr, W-40, 60); ctx.textAlign = 'left'
-    ctx.fillStyle = '#aaa'; ctx.font = '14px sans-serif'; ctx.fillText(`${_vpnType.toUpperCase()} Premium - Server ${_srvLabel}`, 40, 115)
-    ctx.strokeStyle = '#444'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(40, 130); ctx.lineTo(W-40, 130); ctx.stroke()
-    const _lL = ['Username','Paket','VPN','Durasi','Kartu'], _lV = [_nama, _paket, _vpnType.toUpperCase(), `${_hari} Hari`, _kartu]
-    _lL.forEach((l,i) => { const y=160+i*38; ctx.fillStyle='#888'; ctx.font='13px sans-serif'; ctx.fillText(l,50,y); ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif'; ctx.fillText(_lV[i],50,y+18) })
-    const _rL = ['Pembeli','Aplikasi','Lokasi','Provinsi','Status'], _rV = [_customerNum?`${_customerNum.slice(0,4)}****${_customerNum.slice(-4)}`:'-', _aplikasi, _srvLabel, _provinsi, 'SUCCESS']
-    _rL.forEach((l,i) => { const y=160+i*38; ctx.fillStyle='#888'; ctx.font='13px sans-serif'; ctx.fillText(l,420,y); ctx.fillStyle=l==='Status'?'#00e676':'#fff'; ctx.font='bold 15px sans-serif'; ctx.fillText(_rV[i],420,y+18) })
-    ctx.strokeStyle='#444'; ctx.beginPath(); ctx.moveTo(40,H-80); ctx.lineTo(W-40,H-80); ctx.stroke()
-    ctx.fillStyle='#666'; ctx.font='12px sans-serif'; ctx.fillText('Transaction ID',50,H-55)
-    ctx.fillStyle='#aaa'; ctx.font='11px sans-serif'; ctx.fillText(`${Date.now().toString(16)}-${Math.random().toString(36).slice(2,10)}`,50,H-38)
-    ctx.fillStyle='#555'; ctx.font='12px sans-serif'; ctx.textAlign='right'; ctx.fillText('XRESX DIGITAL VPN',W-40,H-55)
-    ctx.fillStyle='#444'; ctx.font='11px sans-serif'; ctx.fillText('PT SONTOLOYO',W-40,H-38); ctx.textAlign='left'
-    _imgBuffer = canvas.toBuffer('image/png')
-  } catch (e) { console.error('[DONE IMG]', e.message) }
-
-  // === KIRIM UCAPAN KE CUSTOMER ===
-  const _doneText = `✅ PESANAN SELESAI\n\nTerima kasih sudah order di *XRESX DIGITAL VPN* 🙏\n\nSemoga config lancar dan awet.\n\n📢 Channel:\n${global.linkchannel || '-'}\n\n👥 Grup:\n${global.linkGrup || '-'}\n\nJangan lupa simpan config dengan baik ya.`
-  await NXL.sendMessage(m.chat, { text: _doneText }, { quoted: m.quoted })
-
-  // === KIRIM KE CHANNEL ===
-  const _chCaption = `🟢 TESTIMONI BERHASIL\n\n🆔 ${_trxId}\n\n👤 Customer:\n${_customerNum?_customerNum.slice(0,4)+'****'+_customerNum.slice(-4):'-'}\n\n📦 Detail Order\n├ Paket      : ${_paket}\n├ VPN        : ${_vpnType.toUpperCase()}\n├ Lokasi     : ${_srvLabel}\n├ Aplikasi   : ${_aplikasi}\n├ Durasi     : ${_hari} Hari\n├ IP         : ${_jumlahIP} Perangkat\n└ Harga      : ${_hargaStr}\n\n✨ Terima kasih telah order di XRESX DIGITAL VPN`
-
-  if (global.idsal && _imgBuffer) {
-    try { await NXL.sendMessage(global.idsal, { image: _imgBuffer, caption: _chCaption }) } catch (e) { console.error('[DONE CH]', e.message) }
-  }
-
-  // === KIRIM KE STATUS WHATSAPP ===
-  if (_imgBuffer) {
-    try { await NXL.sendMessage('status@broadcast', { image: _imgBuffer, caption: _chCaption }) } catch (e) { console.error('[DONE STATUS]', e.message) }
-  }
-
-  await NXL.sendMessage(m.chat, { react: { text: '✅', key: m.key } })
-  m.reply(`✅ *${_trxId}* selesai!\n\n📤 Testimoni terkirim ke channel & status.`)
+  }, { quoted: null });
 }
 break;
 

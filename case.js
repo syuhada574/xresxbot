@@ -7679,6 +7679,19 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
     const harga = priceEntry.harga
     const tanggalNow = moment().tz('Asia/Jakarta').format('DD MMMM YYYY')
 
+    // === TRX COUNTER (persisten) ===
+    const TRX_PATH = './database/trxcounter.json'
+    let trxData = { trx: 0 }
+    try {
+      trxData = JSON.parse(fs.readFileSync(TRX_PATH, 'utf8'))
+      if (typeof trxData.trx !== 'number') trxData.trx = 0
+    } catch {
+      trxData = { trx: 0 }
+    }
+    trxData.trx += 1
+    const trxNumber = `TRX-${String(trxData.trx).padStart(4, '0')}`
+    fs.writeFileSync(TRX_PATH, JSON.stringify(trxData, null, 2))
+
     // React to show processing
     await NXL.sendMessage(m.chat, { react: { text: '⏳', key: m.key } })
 
@@ -7691,12 +7704,14 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       perangkat: jumlahPerangkat,
       harga: harga,
       nomor: customerNumber,
-      tanggal: tanggalNow
+      tanggal: tanggalNow,
+      trx: trxNumber
     })
 
     // Build caption for channel & status
     const caption = `*TRANSAKSI BERHASIL*\n\n` +
       `┌─────────────────────\n` +
+      `│ *No:* ${trxNumber}\n` +
       `│ *Customer:* ${namaCustomer}\n` +
       `│ *Server:* ${serverCode === 'SG' ? 'Singapore' : 'Indonesia'}\n` +
       `│ *Durasi:* ${durasi} Hari\n` +
@@ -7748,6 +7763,7 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
     await NXL.sendMessage(m.chat, { react: { text: '✅', key: m.key } })
 
     const completionMsg = `✅ *TRANSAKSI SELESAI*\n\n` +
+      `• No TRX: ${trxNumber}\n` +
       `• Customer: ${namaCustomer}\n` +
       `• Nomor: wa.me/${customerNumber}\n` +
       `• Server: ${serverCode === 'SG' ? 'Singapore' : 'Indonesia'}\n` +

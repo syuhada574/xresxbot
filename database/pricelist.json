@@ -9,5 +9,5 @@
   { "server": "SG", "durasi": 30, "perangkat": 1, "harga": 8000 },
   { "server": "SG", "durasi": 32, "perangkat": 2, "harga": 10000 },
   { "server": "SG", "durasi": 32, "perangkat": 3, "harga": 12000 },
-  { "server": "SG", "durasi": 32, "perangkat": 4, "harga": 14000 },
+  { "server": "SG", "durasi": 32, "perangkat": 4, "harga": 14000 }
 ]

@@ -1,6 +1,6 @@
 [
   { "server": "ID", "durasi": 7, "perangkat": 1, "harga": 4000 },
-  { "server": "ID", "durasi": 15, "perangkat": 1, "harga": 6000 },
+  { "server": "ID", "durasi": 15, "perangkat": 2, "harga": 6000 },
   { "server": "ID", "durasi": 30, "perangkat": 1, "harga": 12000 },
   { "server": "ID", "durasi": 32, "perangkat": 2, "harga": 13000 },
   { "server": "ID", "durasi": 32, "perangkat": 3, "harga": 15000 },

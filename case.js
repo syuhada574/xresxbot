@@ -7597,7 +7597,7 @@ Dibuat   : ${data.ceated_at}
   break;
 }
 
-case 'done': case 'done1': case 'done2': case 'done3': case 'done4': case 'done5':
+case 'done1': case 'done2': case 'done3': case 'done4': case 'done5':
 case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
   if (!isCreator) return reply(global.mess.owner)
   if (!m.quoted) return reply('⚠️ Reply formulir pembelian customer untuk menggunakan fitur ini.')
@@ -7620,19 +7620,45 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
     const formText = m.quoted.text || m.quoted.body || m.quoted.caption || ''
     if (!formText) return reply('⚠️ Pesan yang direply tidak mengandung teks formulir.')
 
-    // Extract form fields (flexible parsing)
-    const getField = (text, keys) => {
-      for (const key of keys) {
-        const regex = new RegExp(`${key}\\s*[=:]+\\s*(.+)`, 'i')
+    // Extract form fields (flexible parsing - supports official form format)
+    // Official form:
+    //   NAMA            =
+    //   KARTU           =
+    //   NAMA PAKET      =
+    //   BERAPA HARI     =
+    //   TKP / PROVINSI  =
+    //   APLIKASI VPN    =
+    //   SSH ATAU V2RAY  =
+    //   SERVER SG / ID  =
+    const getField = (text, patterns) => {
+      for (const pattern of patterns) {
+        // Match the full label (possibly with spaces/slashes) followed by = or : and value
+        const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const regex = new RegExp(`${escaped}[^=:]*[=:]+\\s*(.+)`, 'i')
         const match = text.match(regex)
-        if (match) return match[1].trim()
+        if (match && match[1].trim()) return match[1].trim()
       }
       return null
     }
 
-    const namaCustomer = getField(formText, ['NAMA', 'NAME', 'CUSTOMER']) || pushname || customerNumber
-    const serverRaw = getField(formText, ['SERVER', 'SV', 'LOKASI', 'LOC'])
-    const durasiRaw = getField(formText, ['DURASI', 'DURATION', 'HARI', 'MASA AKTIF', 'AKTIF'])
+    // Parse NAMA PAKET first to avoid NAMA matching it
+    const namaPaket = getField(formText, ['NAMA PAKET', 'PAKET']) || '-'
+    const aplikasiVpn = getField(formText, ['APLIKASI VPN', 'APLIKASI']) || '-'
+    const sshV2ray = getField(formText, ['SSH ATAU V2RAY', 'SSH/V2RAY', 'SSH']) || '-'
+    const serverRaw = getField(formText, ['SERVER'])
+    const durasiRaw = getField(formText, ['BERAPA HARI', 'DURASI', 'HARI'])
+
+    // For NAMA field: exclude lines that start with NAMA PAKET
+    let namaCustomer = null
+    const namaLines = formText.split('\n')
+    for (const line of namaLines) {
+      const trimmed = line.trim()
+      if (/^NAMA\s*[=:]/i.test(trimmed) && !/^NAMA\s+PAKET/i.test(trimmed)) {
+        const val = trimmed.replace(/^NAMA\s*[=:]+\s*/i, '').trim()
+        if (val) { namaCustomer = val; break }
+      }
+    }
+    if (!namaCustomer) namaCustomer = pushname || customerNumber
 
     if (!serverRaw) return reply('⚠️ Field SERVER tidak ditemukan di formulir.\nPastikan formulir mengandung: SERVER = SG/ID')
     if (!durasiRaw) return reply('⚠️ Field DURASI tidak ditemukan di formulir.\nPastikan formulir mengandung: DURASI = 30')
@@ -7703,9 +7729,11 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       durasi: durasi,
       perangkat: jumlahPerangkat,
       harga: harga,
-      nomor: customerNumber,
       tanggal: tanggalNow,
-      trx: trxNumber
+      trx: trxNumber,
+      namaPaket: namaPaket,
+      aplikasiVpn: aplikasiVpn,
+      sshV2ray: sshV2ray
     })
 
     // Build caption for channel & status
@@ -7716,6 +7744,7 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       `│ *Server:* ${serverCode === 'SG' ? 'Singapore' : 'Indonesia'}\n` +
       `│ *Durasi:* ${durasi} Hari\n` +
       `│ *Perangkat:* ${jumlahPerangkat} IP\n` +
+      `│ *Paket:* ${namaPaket}\n` +
       `│ *Harga:* ${formatRupiah(harga)}\n` +
       `│ *Tanggal:* ${tanggalNow}\n` +
       `└─────────────────────\n\n` +
@@ -7738,24 +7767,45 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
     }
 
     // === SEND TO WHATSAPP STATUS ===
+    let statusSent = false
     try {
-      // Try to share to status (status@broadcast)
-      await NXL.sendMessage('status@broadcast', {
-        image: imgBuffer,
-        caption: caption
-      }, {
-        statusJidList: undefined // sends to all contacts
-      })
+      // Build list of contact JIDs for status visibility
+      const contactJids = Object.keys(global.store?.contacts || {})
+        .filter(j => j.endsWith('@s.whatsapp.net'))
+      // Add owner numbers to ensure they see the status
+      const ownerJids = (global.owner || []).map(v => v.replace(/[^0-9]/g, '') + '@s.whatsapp.net')
+      const allJids = [...new Set([...contactJids, ...ownerJids])]
+
+      if (allJids.length > 0) {
+        await NXL.sendMessage('status@broadcast', {
+          image: imgBuffer,
+          caption: caption
+        }, {
+          statusJidList: allJids
+        })
+        statusSent = true
+        console.log(`[DONE] Status WA berhasil diposting ke ${allJids.length} kontak.`)
+      } else {
+        // Fallback: try without statusJidList if no contacts found
+        await NXL.sendMessage('status@broadcast', {
+          image: imgBuffer,
+          caption: caption
+        })
+        statusSent = true
+        console.log('[DONE] Status WA diposting (tanpa JID list, kontak kosong).')
+      }
     } catch (stErr) {
-      console.log('[DONE] Gagal kirim ke status:', stErr.message)
-      // Fallback: try without statusJidList
+      console.log('[DONE] Status WA GAGAL:', stErr.message)
+      // Fallback attempt
       try {
         await NXL.sendMessage('status@broadcast', {
           image: imgBuffer,
           caption: caption
         })
+        statusSent = true
+        console.log('[DONE] Status WA berhasil via fallback (tanpa JID list).')
       } catch (stErr2) {
-        console.log('[DONE] Fallback status juga gagal:', stErr2.message)
+        console.log('[DONE] Status WA fallback juga GAGAL:', stErr2.message)
       }
     }
 
@@ -7765,20 +7815,29 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
     const completionMsg = `✅ *TRANSAKSI SELESAI*\n\n` +
       `• No TRX: ${trxNumber}\n` +
       `• Customer: ${namaCustomer}\n` +
-      `• Nomor: wa.me/${customerNumber}\n` +
+      `• Nomor: ${customerNumber}\n` +
       `• Server: ${serverCode === 'SG' ? 'Singapore' : 'Indonesia'}\n` +
       `• Durasi: ${durasi} Hari\n` +
       `• Perangkat: ${jumlahPerangkat} IP\n` +
+      `• Paket: ${namaPaket}\n` +
       `• Harga: ${formatRupiah(harga)}\n` +
       `• Tanggal: ${tanggalNow}\n\n` +
       `📢 Channel: ${channelSent ? '✓ Terkirim' : '✗ Gagal/Tidak dikonfigurasi'}\n` +
-      `📱 Status WA: ✓ Diproses\n\n` +
-      `_Gunakan .done${jumlahPerangkat > 1 ? jumlahPerangkat : ''} untuk ${jumlahPerangkat} perangkat_`
+      `📱 Status WA: ${statusSent ? '✓ Terkirim' : '✗ Gagal'}\n\n` +
+      `_Gunakan .done${jumlahPerangkat} untuk ${jumlahPerangkat} perangkat_`
 
     await NXL.sendMessage(m.chat, { image: imgBuffer, caption: completionMsg }, { quoted: m })
 
     // === SEND THANK YOU TO CUSTOMER ===
     try {
+      let linkSection = ''
+      if (global.linkchannel) {
+        linkSection += `\n📢 Testimoni: ${global.linkchannel}`
+      }
+      if (global.linkGrup) {
+        linkSection += `\n📣 Grup: ${global.linkGrup}`
+      }
+
       const thankMsg = `✅ *Pesanan Kamu Sudah Selesai!*\n\n` +
         `Halo *${namaCustomer}*,\n` +
         `Pesanan VPN kamu sudah aktif:\n\n` +
@@ -7786,8 +7845,9 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
         `• Durasi: ${durasi} Hari\n` +
         `• Perangkat: ${jumlahPerangkat} IP\n\n` +
         `Terima kasih telah berbelanja di *XRESX DIGITAL VPN* 🙏\n` +
-        `Jika ada kendala, silakan hubungi admin.\n\n` +
-        `_PT SONTOLOYO_`
+        `Jika ada kendala, silakan hubungi admin.` +
+        (linkSection ? `\n${linkSection}` : '') +
+        `\n\n_PT SONTOLOYO_`
       await NXL.sendMessage(customerJid, { text: thankMsg })
     } catch (custErr) {
       console.log('[DONE] Gagal kirim ucapan ke customer:', custErr.message)

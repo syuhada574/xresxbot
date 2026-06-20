@@ -7616,23 +7616,17 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
     const customerNumber = customerJid.split('@')[0]
     if (!customerNumber) return reply('⚠️ Tidak dapat mendeteksi nomor customer dari pesan yang direply.')
 
+    // BUG #1 GUARD: jika admin menjalankan .doneX langsung di chat pribadi customer
+    // (m.chat === customerJid), pastikan tidak ada gambar/caption testimoni apa pun
+    // yang terkirim ke chat tersebut selain pesan terimakasih.
+    const isRunningInsideCustomerChat = m.chat === customerJid
+
     // Parse form data from quoted message
     const formText = m.quoted.text || m.quoted.body || m.quoted.caption || ''
     if (!formText) return reply('⚠️ Pesan yang direply tidak mengandung teks formulir.')
 
-    // Extract form fields (flexible parsing - supports official form format)
-    // Official form:
-    //   NAMA            =
-    //   KARTU           =
-    //   NAMA PAKET      =
-    //   BERAPA HARI     =
-    //   TKP / PROVINSI  =
-    //   APLIKASI VPN    =
-    //   SSH ATAU V2RAY  =
-    //   SERVER SG / ID  =
     const getField = (text, patterns) => {
       for (const pattern of patterns) {
-        // Match the full label (possibly with spaces/slashes) followed by = or : and value
         const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const regex = new RegExp(`${escaped}[^=:]*[=:]+\\s*(.+)`, 'i')
         const match = text.match(regex)
@@ -7641,14 +7635,14 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       return null
     }
 
-    // Parse NAMA PAKET first to avoid NAMA matching it
     const namaPaket = getField(formText, ['NAMA PAKET', 'PAKET']) || '-'
     const aplikasiVpn = getField(formText, ['APLIKASI VPN', 'APLIKASI']) || '-'
     const sshV2ray = getField(formText, ['SSH ATAU V2RAY', 'SSH/V2RAY', 'SSH']) || '-'
     const serverRaw = getField(formText, ['SERVER'])
     const durasiRaw = getField(formText, ['BERAPA HARI', 'DURASI', 'HARI'])
 
-    // For NAMA field: exclude lines that start with NAMA PAKET
+    // NAMA customer dari formulir HANYA dipakai untuk pesan internal/ucapan,
+    // TIDAK PERNAH untuk field CUSTOMER pada gambar testimoni (lihat BUG #2).
     let namaCustomer = null
     const namaLines = formText.split('\n')
     for (const line of namaLines) {
@@ -7658,12 +7652,14 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
         if (val) { namaCustomer = val; break }
       }
     }
-    if (!namaCustomer) namaCustomer = pushname || customerNumber
+    // Fallback nama HANYA untuk sapaan ucapan terimakasih, BUKAN untuk gambar.
+    // Catatan: sengaja TIDAK fallback ke pushName, karena pushName adalah nama
+    // kontak tersimpan di nomor bot (bukan identitas customer) — ini sumber BUG #2.
+    if (!namaCustomer) namaCustomer = `Pelanggan +${customerNumber}`
 
     if (!serverRaw) return reply('⚠️ Field SERVER tidak ditemukan di formulir.\nPastikan formulir mengandung: SERVER = SG/ID')
     if (!durasiRaw) return reply('⚠️ Field DURASI tidak ditemukan di formulir.\nPastikan formulir mengandung: DURASI = 30')
 
-    // Parse server
     const serverNorm = serverRaw.toUpperCase().trim()
     let serverCode = null
     if (serverNorm.includes('SG') || serverNorm.includes('SINGAP') || serverNorm.includes('SINGAPORE')) {
@@ -7673,12 +7669,10 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
     }
     if (!serverCode) return reply(`⚠️ Server "${serverRaw}" tidak dikenali.\nGunakan: SG atau ID`)
 
-    // Parse durasi
     const durasiMatch = durasiRaw.match(/(\d+)/)
     if (!durasiMatch) return reply(`⚠️ Durasi "${durasiRaw}" tidak valid.\nGunakan angka, contoh: 30`)
     const durasi = parseInt(durasiMatch[1])
 
-    // Load pricelist and find matching price
     let pricelist = []
     try {
       pricelist = JSON.parse(fs.readFileSync('./database/pricelist.json', 'utf8'))
@@ -7721,10 +7715,10 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
     // React to show processing
     await NXL.sendMessage(m.chat, { react: { text: '⏳', key: m.key } })
 
-    // Generate testimony image
+    // Generate testimony image — field CUSTOMER otomatis disensor di dalam generator (BUG #2 fix)
     const { generateTestimonyImage, formatRupiah } = require('./lib/testimony')
     const imgBuffer = generateTestimonyImage({
-      nama: namaCustomer,
+      customerNumber: customerNumber,
       server: serverCode,
       durasi: durasi,
       perangkat: jumlahPerangkat,
@@ -7736,11 +7730,12 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       sshV2ray: sshV2ray
     })
 
-    // Build caption for channel & status
+    // Build caption for channel & status (boleh tampil ke publik, jadi tetap disensor juga)
+    const { maskPhoneNumber } = require('./lib/testimony')
     const caption = `*TRANSAKSI BERHASIL*\n\n` +
       `┌─────────────────────\n` +
       `│ *No:* ${trxNumber}\n` +
-      `│ *Customer:* ${namaCustomer}\n` +
+      `│ *Customer:* ${maskPhoneNumber(customerNumber)}\n` +
       `│ *Server:* ${serverCode === 'SG' ? 'Singapore' : 'Indonesia'}\n` +
       `│ *Durasi:* ${durasi} Hari\n` +
       `│ *Perangkat:* ${jumlahPerangkat} IP\n` +
@@ -7766,50 +7761,69 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       }
     }
 
-    // === SEND TO WHATSAPP STATUS ===
+    // === SEND TO WHATSAPP STATUS (native, mengikuti privasi akun bot — BUG #3 fix) ===
+    // PENTING: WhatsApp mengenkripsi status secara per-penerima, sehingga protokolnya
+    // SELALU butuh daftar JID penerima saat kirim (statusJidList) — ini bukan bug Baileys,
+    // ini cara kerja protokolnya. Yang salah sebelumnya adalah daftar JID-nya diambil dari
+    // cache pesan yang tidak lengkap (global.store.contacts) dan tidak mengacu sama sekali
+    // ke setting privasi status akun bot. Di bawah ini kita:
+    //   1. Baca mode privasi status asli akun bot (all / contacts / contact_blacklist)
+    //   2. Ambil kandidat kontak dari store kontak bot (representasi "semua kontak")
+    //   3. Kalau mode contact_blacklist -> kurangi dengan fetchBlocklist()
+    //   4. Kalau mode all -> kirim ke seluruh kontak
+    //   5. Kalau mode contacts (default WA) -> Baileys/WhatsApp tidak mengekspos daftar
+    //      "only share with" yang sesungguhnya ke client pihak ketiga, jadi kita fallback
+    //      ke seluruh kontak yang dikenal bot (paling mendekati perilaku native).
     let statusSent = false
     try {
-      // Build list of contact JIDs for status visibility
+      let privacyMode = 'contacts'
+      try {
+        const privacySettings = await NXL.fetchPrivacySettings(true)
+        if (privacySettings?.status) privacyMode = privacySettings.status
+      } catch (privErr) {
+        console.log('[DONE] Gagal fetch privacy settings, default ke "contacts":', privErr.message)
+      }
+
       const contactJids = Object.keys(global.store?.contacts || {})
         .filter(j => j.endsWith('@s.whatsapp.net'))
-      // Add owner numbers to ensure they see the status
-      const ownerJids = (global.owner || []).map(v => v.replace(/[^0-9]/g, '') + '@s.whatsapp.net')
-      const allJids = [...new Set([...contactJids, ...ownerJids])]
 
-      if (allJids.length > 0) {
+      let statusJidList = [...new Set(contactJids)]
+
+      if (privacyMode === 'contact_blacklist') {
+        try {
+          const blocked = await NXL.fetchBlocklist()
+          const blockedSet = new Set(blocked || [])
+          statusJidList = statusJidList.filter(j => !blockedSet.has(j))
+        } catch (blErr) {
+          console.log('[DONE] Gagal fetch blocklist:', blErr.message)
+        }
+      }
+      // privacyMode === 'all' atau 'contacts' (fallback) -> pakai seluruh kontak yang dikenal
+
+      if (statusJidList.length > 0) {
         await NXL.sendMessage('status@broadcast', {
           image: imgBuffer,
           caption: caption
         }, {
-          statusJidList: allJids
+          statusJidList
         })
         statusSent = true
-        console.log(`[DONE] Status WA berhasil diposting ke ${allJids.length} kontak.`)
+        console.log(`[DONE] Status WA diposting (mode privasi: ${privacyMode}, ${statusJidList.length} kandidat penerima).`)
       } else {
-        // Fallback: try without statusJidList if no contacts found
-        await NXL.sendMessage('status@broadcast', {
-          image: imgBuffer,
-          caption: caption
-        })
-        statusSent = true
-        console.log('[DONE] Status WA diposting (tanpa JID list, kontak kosong).')
+        console.log('[DONE] Status WA dilewati: tidak ada kontak yang dikenal bot untuk dijadikan penerima.')
       }
     } catch (stErr) {
       console.log('[DONE] Status WA GAGAL:', stErr.message)
-      // Fallback attempt
-      try {
-        await NXL.sendMessage('status@broadcast', {
-          image: imgBuffer,
-          caption: caption
-        })
-        statusSent = true
-        console.log('[DONE] Status WA berhasil via fallback (tanpa JID list).')
-      } catch (stErr2) {
-        console.log('[DONE] Status WA fallback juga GAGAL:', stErr2.message)
-      }
     }
 
-    // === SEND COMPLETION MESSAGE TO OWNER ===
+    // === KONFIRMASI KE ADMIN (TEKS SAJA, TANPA GAMBAR) ===
+    // BUG #1 FIX: sebelumnya bagian ini mengirim ULANG gambar+caption testimoni ke m.chat.
+    // Karena admin sering menjalankan .doneX dengan me-reply formulir LANGSUNG di chat
+    // pribadi customer, m.chat di kondisi itu SAMA DENGAN customerJid — sehingga customer
+    // ikut menerima gambar & caption testimoni. Sekarang konfirmasi ke admin dibuat
+    // teks-saja (tanpa gambar/caption testimoni) dan HANYA dikirim jika chat saat ini
+    // BUKAN chat pribadi si customer, supaya customer benar-benar tidak menerima apa pun
+    // selain pesan terimakasih di bagian bawah.
     await NXL.sendMessage(m.chat, { react: { text: '✅', key: m.key } })
 
     const completionMsg = `✅ *TRANSAKSI SELESAI*\n\n` +
@@ -7826,9 +7840,11 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       `📱 Status WA: ${statusSent ? '✓ Terkirim' : '✗ Gagal'}\n\n` +
       `_Gunakan .done${jumlahPerangkat} untuk ${jumlahPerangkat} perangkat_`
 
-    await NXL.sendMessage(m.chat, { image: imgBuffer, caption: completionMsg }, { quoted: m })
+    if (!isRunningInsideCustomerChat) {
+      await NXL.sendMessage(m.chat, { text: completionMsg }, { quoted: m })
+    }
 
-    // === SEND THANK YOU TO CUSTOMER ===
+    // === SEND THANK YOU TO CUSTOMER (SATU-SATUNYA PESAN YANG CUSTOMER TERIMA) ===
     try {
       let linkSection = ''
       if (global.linkchannel) {

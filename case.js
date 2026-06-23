@@ -7734,7 +7734,10 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       trx: trxNumber,
       namaPaket: namaPaket,
       aplikasiVpn: aplikasiVpn,
-      sshV2ray: sshV2ray
+      sshV2ray: sshV2ray,
+      ptName: global.wm,
+      brandName: global.ownername,
+      ownerName: (global.owner && global.owner[0]) || ''
     })
 
     const caption = `*TRANSAKSI BERHASIL*\n\n` +

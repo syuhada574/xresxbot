@@ -7611,26 +7611,41 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
     }
     if (jumlahPerangkat < 1) jumlahPerangkat = 1
 
-    // Get customer number from the person who sent the replied message
-    const customerJid = m.quoted.sender || m.quoted.participant || ''
+    // Sumber identitas customer: m.chat (JID percakapan pribadi), bukan
+    // m.quoted.sender. m.quoted.sender berasal dari contextInfo.participant
+    // yang bisa berupa LID dan hanya "dinormalisasi" via penggantian suffix
+    // oleh library, bukan lookup nomor asli. m.chat pada chat pribadi sudah
+    // dinormalisasi ke nomor asli oleh library saat pesan diterima.
+    const customerJid = m.chat
     const customerNumber = customerJid.split('@')[0]
-    if (!customerNumber) return reply('⚠️ Tidak dapat mendeteksi nomor customer dari pesan yang direply.')
+    if (!customerNumber || customerJid.endsWith('@g.us')) {
+      return reply('⚠️ Fitur ini hanya bisa dipakai dengan me-reply formulir di dalam chat pribadi customer (bukan grup).')
+    }
 
-    // BUG #1 GUARD: jika admin menjalankan .doneX langsung di chat pribadi customer
-    // (m.chat === customerJid), pastikan tidak ada gambar/caption testimoni apa pun
-    // yang terkirim ke chat tersebut selain pesan terimakasih.
     const isRunningInsideCustomerChat = m.chat === customerJid
 
     // Parse form data from quoted message
     const formText = m.quoted.text || m.quoted.body || m.quoted.caption || ''
     if (!formText) return reply('⚠️ Pesan yang direply tidak mengandung teks formulir.')
 
+    const sanitizeField = (val) => {
+      if (!val) return val
+      return val
+        .replace(/`+/g, '')
+        .replace(/\*+/g, '')
+        .replace(/_+/g, ' ')
+        .replace(/~+/g, '')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+    }
+
     const getField = (text, patterns) => {
       for (const pattern of patterns) {
         const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const regex = new RegExp(`${escaped}[^=:]*[=:]+\\s*(.+)`, 'i')
         const match = text.match(regex)
-        if (match && match[1].trim()) return match[1].trim()
+        if (match && match[1].trim()) return sanitizeField(match[1].trim())
       }
       return null
     }
@@ -7641,20 +7656,15 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
     const serverRaw = getField(formText, ['SERVER'])
     const durasiRaw = getField(formText, ['BERAPA HARI', 'DURASI', 'HARI'])
 
-    // NAMA customer dari formulir HANYA dipakai untuk pesan internal/ucapan,
-    // TIDAK PERNAH untuk field CUSTOMER pada gambar testimoni (lihat BUG #2).
     let namaCustomer = null
     const namaLines = formText.split('\n')
     for (const line of namaLines) {
-      const trimmed = line.trim()
+      const trimmed = sanitizeField(line.trim())
       if (/^NAMA\s*[=:]/i.test(trimmed) && !/^NAMA\s+PAKET/i.test(trimmed)) {
         const val = trimmed.replace(/^NAMA\s*[=:]+\s*/i, '').trim()
         if (val) { namaCustomer = val; break }
       }
     }
-    // Fallback nama HANYA untuk sapaan ucapan terimakasih, BUKAN untuk gambar.
-    // Catatan: sengaja TIDAK fallback ke pushName, karena pushName adalah nama
-    // kontak tersimpan di nomor bot (bukan identitas customer) — ini sumber BUG #2.
     if (!namaCustomer) namaCustomer = `Pelanggan +${customerNumber}`
 
     if (!serverRaw) return reply('⚠️ Field SERVER tidak ditemukan di formulir.\nPastikan formulir mengandung: SERVER = SG/ID')
@@ -7699,7 +7709,6 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
     const harga = priceEntry.harga
     const tanggalNow = moment().tz('Asia/Jakarta').format('DD MMMM YYYY')
 
-    // === TRX COUNTER (persisten) ===
     const TRX_PATH = './database/trxcounter.json'
     let trxData = { trx: 0 }
     try {
@@ -7712,11 +7721,9 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
     const trxNumber = `TRX-${String(trxData.trx).padStart(4, '0')}`
     fs.writeFileSync(TRX_PATH, JSON.stringify(trxData, null, 2))
 
-    // React to show processing
     await NXL.sendMessage(m.chat, { react: { text: '⏳', key: m.key } })
 
-    // Generate testimony image — field CUSTOMER otomatis disensor di dalam generator (BUG #2 fix)
-    const { generateTestimonyImage, formatRupiah } = require('./lib/testimony')
+    const { generateTestimonyImage, formatRupiah, maskPhoneNumber } = require('./lib/testimony')
     const imgBuffer = generateTestimonyImage({
       customerNumber: customerNumber,
       server: serverCode,
@@ -7730,8 +7737,6 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       sshV2ray: sshV2ray
     })
 
-    // Build caption for channel & status (boleh tampil ke publik, jadi tetap disensor juga)
-    const { maskPhoneNumber } = require('./lib/testimony')
     const caption = `*TRANSAKSI BERHASIL*\n\n` +
       `┌─────────────────────\n` +
       `│ *No:* ${trxNumber}\n` +
@@ -7746,7 +7751,6 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       `Terima kasih telah berbelanja di *XRESX DIGITAL VPN* ✓\n` +
       `_Layanan VPN Premium Terpercaya_`
 
-    // === SEND TO CHANNEL ===
     const channelJid = global.idsal || ''
     let channelSent = false
     if (channelJid) {
@@ -7761,19 +7765,6 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       }
     }
 
-    // === SEND TO WHATSAPP STATUS (native, mengikuti privasi akun bot — BUG #3 fix) ===
-    // PENTING: WhatsApp mengenkripsi status secara per-penerima, sehingga protokolnya
-    // SELALU butuh daftar JID penerima saat kirim (statusJidList) — ini bukan bug Baileys,
-    // ini cara kerja protokolnya. Yang salah sebelumnya adalah daftar JID-nya diambil dari
-    // cache pesan yang tidak lengkap (global.store.contacts) dan tidak mengacu sama sekali
-    // ke setting privasi status akun bot. Di bawah ini kita:
-    //   1. Baca mode privasi status asli akun bot (all / contacts / contact_blacklist)
-    //   2. Ambil kandidat kontak dari store kontak bot (representasi "semua kontak")
-    //   3. Kalau mode contact_blacklist -> kurangi dengan fetchBlocklist()
-    //   4. Kalau mode all -> kirim ke seluruh kontak
-    //   5. Kalau mode contacts (default WA) -> Baileys/WhatsApp tidak mengekspos daftar
-    //      "only share with" yang sesungguhnya ke client pihak ketiga, jadi kita fallback
-    //      ke seluruh kontak yang dikenal bot (paling mendekati perilaku native).
     let statusSent = false
     try {
       let privacyMode = 'contacts'
@@ -7798,7 +7789,9 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
           console.log('[DONE] Gagal fetch blocklist:', blErr.message)
         }
       }
-      // privacyMode === 'all' atau 'contacts' (fallback) -> pakai seluruh kontak yang dikenal
+
+      const ownJid = NXL.decodeJid ? NXL.decodeJid(NXL.user.id) : (NXL.user.id.split(':')[0] + '@s.whatsapp.net')
+      if (ownJid && !statusJidList.includes(ownJid)) statusJidList.push(ownJid)
 
       if (statusJidList.length > 0) {
         await NXL.sendMessage('status@broadcast', {
@@ -7808,7 +7801,7 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
           statusJidList
         })
         statusSent = true
-        console.log(`[DONE] Status WA diposting (mode privasi: ${privacyMode}, ${statusJidList.length} kandidat penerima).`)
+        console.log(`[DONE] Status WA diposting (mode privasi: ${privacyMode}, ${statusJidList.length} kandidat penerima termasuk akun bot sendiri).`)
       } else {
         console.log('[DONE] Status WA dilewati: tidak ada kontak yang dikenal bot untuk dijadikan penerima.')
       }
@@ -7816,14 +7809,6 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       console.log('[DONE] Status WA GAGAL:', stErr.message)
     }
 
-    // === KONFIRMASI KE ADMIN (TEKS SAJA, TANPA GAMBAR) ===
-    // BUG #1 FIX: sebelumnya bagian ini mengirim ULANG gambar+caption testimoni ke m.chat.
-    // Karena admin sering menjalankan .doneX dengan me-reply formulir LANGSUNG di chat
-    // pribadi customer, m.chat di kondisi itu SAMA DENGAN customerJid — sehingga customer
-    // ikut menerima gambar & caption testimoni. Sekarang konfirmasi ke admin dibuat
-    // teks-saja (tanpa gambar/caption testimoni) dan HANYA dikirim jika chat saat ini
-    // BUKAN chat pribadi si customer, supaya customer benar-benar tidak menerima apa pun
-    // selain pesan terimakasih di bagian bawah.
     await NXL.sendMessage(m.chat, { react: { text: '✅', key: m.key } })
 
     const completionMsg = `✅ *TRANSAKSI SELESAI*\n\n` +
@@ -7844,7 +7829,6 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
       await NXL.sendMessage(m.chat, { text: completionMsg }, { quoted: m })
     }
 
-    // === SEND THANK YOU TO CUSTOMER (SATU-SATUNYA PESAN YANG CUSTOMER TERIMA) ===
     try {
       let linkSection = ''
       if (global.linkchannel) {
@@ -7875,7 +7859,7 @@ case 'done6': case 'done7': case 'done8': case 'done9': case 'done10': {
   }
 }
 break
-
+		
 default:
 if (budy.startsWith('=>')) {
 if (!isCreator) return
